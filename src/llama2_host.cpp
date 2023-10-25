@@ -19,6 +19,7 @@ void Llama2(
     // TODO: merge these weights as much as possible
     tapa::mmap<float> rms_att_weight,
     tapa::mmap<float> rms_ffn_weight,
+    tapa::mmap<float> rms_final_weight,
     tapa::mmap<float> wq,
     tapa::mmap<float> wk,
     tapa::mmap<float> wv,
@@ -29,6 +30,7 @@ void Llama2(
     tapa::mmap<float_v2> freq_cis,
     tapa::mmap<float> key_cache,
     tapa::mmap<float> value_cache,
+    tapa::mmap<float> output_weight,
     tapa::mmap<float> output
 );
 
@@ -295,16 +297,18 @@ int main(int argc, char *argv[]) {
     int token = prompts[0];  // 1 = BOS token in Llama-2 sentence-piece
 
     tensor1d token_emb_fpga;
-    tensor1d rms_att_w_fpga; tensor1d rms_ffn_w_fpga;
+    tensor1d rms_att_w_fpga; tensor1d rms_ffn_w_fpga; tensor1d rms_final_w_fpga;
     tensor1d wq_fpga; tensor1d wk_fpga; tensor1d wv_fpga; tensor1d wo_fpga;
     tensor1d w1_fpga; tensor1d w2_fpga; tensor1d w3_fpga;
     tensor1d freq_cis;
-    tensor1d output(4096, 0);
+    tensor1d output_w_fpga;
+    tensor1d output(32000, 0);
     tensor1d key_cache(4096*512*32, 0);
     tensor1d value_cache(4096*512*32, 0);
     flatten(transformer_weights.token_embedding_table, token_emb_fpga);
     flatten(transformer_weights.rms_att_weight, rms_att_w_fpga);
     flatten(transformer_weights.rms_ffn_weight, rms_ffn_w_fpga);
+    flatten(transformer_weights.output_weight, output_w_fpga);
     flatten3d(transformer_weights.wq, wq_fpga);
     flatten3d(transformer_weights.wk, wk_fpga);
     flatten3d(transformer_weights.wv, wv_fpga);
@@ -320,6 +324,7 @@ int main(int argc, char *argv[]) {
                         tapa::read_only_mmap<float>(token_emb_fpga),
                         tapa::read_only_mmap<float>(rms_att_w_fpga),
                         tapa::read_only_mmap<float>(rms_ffn_w_fpga),
+                        tapa::read_only_mmap<float>(transformer_weights.rms_final_weight),
                         tapa::read_only_mmap<float>(wq_fpga),
                         tapa::read_only_mmap<float>(wk_fpga),
                         tapa::read_only_mmap<float>(wv_fpga),
@@ -330,6 +335,7 @@ int main(int argc, char *argv[]) {
                         tapa::read_only_mmap<float>(freq_cis).reinterpret<float_v2>(),
                         tapa::read_write_mmap<float>(key_cache),
                         tapa::read_write_mmap<float>(value_cache),
+                        tapa::read_only_mmap<float>(output_w_fpga),
                         tapa::write_only_mmap<float>(output)
                         );
     // for (int pos = 0; pos < config.seq_len; ++pos) {

@@ -311,7 +311,7 @@ void read_cache(
         done.read();
         for(int i = 0; i < N_HEADS; i++){
             for(int j = 0; j <= token_position; j++){
-                int offset = l*DIM*(token_position+1)+j*DIM+i*HEAD_SIZE;
+                int offset = l*DIM*MAX_SEQ_LEN+j*DIM+i*HEAD_SIZE;
                 for(int i_req = offset, i_resp = 0; i_resp < HEAD_SIZE;){
                     #pragma HLS pipeline II=1
                     if((i_req < offset+HEAD_SIZE) & !keys.read_addr.full()){
@@ -425,6 +425,35 @@ void matmul_output(
     }
 }
 
+void matmul_logits(
+    tapa::istream<float>& input,
+    tapa::istream<float>& weight,
+    tapa::ostream<float>& output
+){
+    for(int l = 0; l < N_LAYERS; l++){
+        float input_cache[DIM];
+        for(int i = 0; i < DIM;){
+            if(!input.empty()){
+                float tmp; input.try_read(tmp);
+                input_cache[i] = tmp;
+                i++;
+            }
+        }
+
+        for(int i = 0; i < VOCAB_SIZE; i++){
+            float val = 0.0;
+            for(int j = 0; j < DIM;){
+                if(!weight.empty()){
+                    float tmp_w; weight.try_read(tmp_w);
+                    val += tmp_w * input_cache[j];
+                    j++;
+                }
+            }
+            output.write(val);
+        }
+    }
+}
+
 void layer_control_adapter(
     tapa::istream<float>& fifo_token_emb,
     tapa::istream<float>& fifo_feedback,
@@ -444,7 +473,7 @@ void layer_control_adapter(
         if(!fifo_feedback.empty() & !fifo_next_layer.full()){
             float tmp; fifo_feedback.try_read(tmp);
             fifo_next_layer.try_write(tmp);
-            LOG(INFO) << i;
+            if(i % DIM == 0) LOG(INFO) << i / DIM;
             i++;
         }
     }
@@ -466,6 +495,42 @@ void read_weight(
     for(int i_req = 0, i_resp = 0; i_resp < DIM * N_LAYERS;){
         #pragma HLS pipeline II=1
         if((i_req < DIM * N_LAYERS) & !weight.read_addr.full()){
+            weight.read_addr.write(i_req);
+            i_req++;
+        }
+        if(!weight.read_data.empty()){
+            float tmp_o; weight.read_data.try_read(tmp_o);
+            fifo_w_out.write(tmp_o);
+            i_resp++;
+        }
+    }
+}
+
+void read_final_rms_weight(
+    tapa::async_mmap<float>& weight,
+    tapa::ostream<float>& fifo_w_out
+) {
+    for(int i_req = 0, i_resp = 0; i_resp < DIM;){
+        #pragma HLS pipeline II=1
+        if((i_req < DIM) & !weight.read_addr.full()){
+            weight.read_addr.write(i_req);
+            i_req++;
+        }
+        if(!weight.read_data.empty()){
+            float tmp_o; weight.read_data.try_read(tmp_o);
+            fifo_w_out.write(tmp_o);
+            i_resp++;
+        }
+    }
+}
+
+void read_final_output_weight(
+    tapa::async_mmap<float>& weight,
+    tapa::ostream<float>& fifo_w_out
+) {
+    for(int i_req = 0, i_resp = 0; i_resp < DIM*VOCAB_SIZE;){
+        #pragma HLS pipeline II=1
+        if((i_req < DIM*VOCAB_SIZE) & !weight.read_addr.full()){
             weight.read_addr.write(i_req);
             i_req++;
         }
@@ -562,12 +627,13 @@ void write_logits(
     tapa::istream<float>& fifo_logits,
     tapa::async_mmap<float>& output
 ) {
-    for(int i_req = 0, i_resp = 0; i_resp < DIM;){
+    for(int i_req = 0, i_resp = 0; i_resp < VOCAB_SIZE;){
         #pragma HLS pipeline II=1
-        if((i_req < DIM) & !fifo_logits.empty() & !output.write_addr.full() & !output.write_data.full()){
+        if((i_req < VOCAB_SIZE) & !fifo_logits.empty() & !output.write_addr.full() & !output.write_data.full()){
             output.write_addr.try_write(i_req);
             float tmp; fifo_logits.try_read(tmp);
             output.write_data.try_write(tmp);
+            LOG(INFO) << tmp;
             ++i_req;
         }
         if(!output.write_resp.empty()){
@@ -725,6 +791,7 @@ void Llama2(
     // TODO: merge these weights as much as possible
     tapa::mmap<float> rms_att_weight,
     tapa::mmap<float> rms_ffn_weight,
+    tapa::mmap<float> rms_final_weight,
     tapa::mmap<float> wq,
     tapa::mmap<float> wk,
     tapa::mmap<float> wv,
@@ -735,6 +802,7 @@ void Llama2(
     tapa::mmap<float_v2> freq_cis,
     tapa::mmap<float> key_cache,
     tapa::mmap<float> value_cache,
+    tapa::mmap<float> output_weight,
     tapa::mmap<float> output
 ){
 
@@ -744,8 +812,10 @@ void Llama2(
     tapa::stream<float, FIFO_DEPTH> fifo_exit("fifo_exit");
     tapa::stream<float, FIFO_DEPTH> rms_att_w("rms_att_w");
     tapa::stream<float, FIFO_DEPTH> rms_ffn_w("rms_ffn_w");
+    tapa::stream<float, FIFO_DEPTH> rms_final_w("rms_final_w");
     tapa::streams<float, 4, FIFO_DEPTH> fifo_rms_to_kqv("fifo_rms_to_kqv"); 
     tapa::streams<float, 4, FIFO_DEPTH> fifo_rms_to_ffn("fifo_rms_to_ffn");
+    tapa::stream<float, FIFO_DEPTH> fifo_rms_to_output("fifo_rms_to_output");
     tapa::stream<float, FIFO_DEPTH> fifo_wq("fifo_wq");
     tapa::stream<float, FIFO_DEPTH> fifo_wk("fifo_wk");
     tapa::stream<float, FIFO_DEPTH> fifo_wv("fifo_wv");
@@ -753,6 +823,7 @@ void Llama2(
     tapa::stream<float, FIFO_DEPTH> fifo_w1("fifo_w1");
     tapa::stream<float, FIFO_DEPTH> fifo_w2("fifo_w2");
     tapa::stream<float, FIFO_DEPTH> fifo_w3("fifo_w3");
+    tapa::stream<float, FIFO_DEPTH> fifo_output_w("fifo_output_w");
     
     tapa::streams<float, 3, FIFO_DEPTH> fifo_query("fifo_query");
     tapa::streams<float, 3, FIFO_DEPTH> fifo_key("fifo_key");
@@ -774,6 +845,7 @@ void Llama2(
     tapa::stream<float, FIFO_DEPTH> fifo_w3_to_elemul("fifo_w3_to_elemul");
     tapa::stream<float, FIFO_DEPTH> fifo_elemul_to_w2("fifo_elemul_to_w2");
     tapa::stream<float, FIFO_DEPTH> fifo_w2_exit("fifo_w2_exit");
+    tapa::stream<float, FIFO_DEPTH> fifo_logits("fifo_logits");
 
     tapa::task()
         .invoke<tapa::join>(
@@ -785,6 +857,8 @@ void Llama2(
         // read weights
         .invoke<tapa::join>(read_weight, rms_att_weight, rms_att_w)
         .invoke<tapa::join>(read_weight, rms_ffn_weight, rms_ffn_w)
+        .invoke<tapa::join>(read_final_rms_weight, rms_final_weight, rms_final_w)
+        .invoke<tapa::join>(read_final_output_weight, output_weight, fifo_output_w)
         .invoke<tapa::join>(read_weight_kqv, wq, fifo_wq)
         .invoke<tapa::join>(read_weight_kqv, wk, fifo_wk)
         .invoke<tapa::join>(read_weight_kqv, wv, fifo_wv)
@@ -866,7 +940,10 @@ void Llama2(
         .invoke<tapa::detach>(ele_mul, fifo_silu_to_elemul, fifo_w3_to_elemul, fifo_elemul_to_w2)
         .invoke<tapa::join>(matmul_w2, fifo_elemul_to_w2, fifo_w2, fifo_w2_exit)
         .invoke<tapa::detach>(accum, fifo_residual, fifo_w2_exit, fifo_layer_out)
+        // final rms + ffn
+        .invoke<tapa::detach>(rmsnorm, fifo_rms_to_output, fifo_exit, rms_final_w)
+        .invoke<tapa::join>(matmul_logits, fifo_rms_to_output, fifo_output_w, fifo_logits)
         // write out logits
-        .invoke<tapa::join>(write_logits, fifo_exit, output);
+        .invoke<tapa::join>(write_logits, fifo_logits, output);
         
 }
