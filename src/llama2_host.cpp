@@ -12,6 +12,8 @@ using tensor3d = std::vector<tensor2d>;
 
 using float_v2 = tapa::vec_t<float, 2>;
 
+constexpr float EPS = 1e-5;
+
 void Llama2(
     const int token_index,
     const int token_position,
@@ -224,6 +226,57 @@ void merge_vec(
     }
 }
 
+void softmax_host(tensor1d &output, tensor1d &input, int max_pos = -1) {
+    if (max_pos == -1)  max_pos = input.size();
+    // float max_val = input[0];
+    // for (int i = 1; i < max_pos; i++)
+    //     if (input[i] > max_val)  max_val = input[i];
+    
+    // exp and sum
+    float sum = 0;
+    for (int i = 0; i < max_pos; i++) {
+        output[i] = exp(input[i]);
+        sum += output[i];
+    }
+    // normalize
+    for (int i = 0; i < max_pos; i++)
+        output[i] /= sum;
+}
+
+int sample(tensor1d &probabilities) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(0, 1);
+    float r = dis(gen);
+
+    float cdf = 0.0;
+    for (int i = 0; i < probabilities.size(); ++i) {
+        cdf += probabilities[i];
+        if (r < cdf)
+            return i;
+    }
+    // in case of rounding errors
+    return probabilities.size() - 1;
+}
+
+int argmax(tensor1d &values) {
+    int max_i = 0;
+    float max_value = values[0];
+    for (int i = 1; i < values.size(); ++i)
+        if (values[i] > max_value) {
+            max_i = i;
+            max_value = values[i];
+        }
+    return max_i;
+}
+
+void print_tensor1d(tensor1d &values){
+    for(int i = 0; i < values.size(); i++){
+        std::cout << values[i] << std::endl;
+    }
+    std::cout << "\n";
+}
+
 
 int main(int argc, char *argv[]) {
     // std::cout.tie(NULL);
@@ -318,9 +371,10 @@ int main(int argc, char *argv[]) {
     flatten3d(transformer_weights.w3, w3_fpga);
     merge_vec(transformer_weights.freq_cis_real, transformer_weights.freq_cis_imag, freq_cis);
 
-
-    int64_t kernel_time_ns = tapa::invoke(Llama2, FLAGS_bitstream,
-                        token, 0,
+    for(int pos = 0; pos < config.seq_len; ++pos){
+        std::cout << "POS: " << pos << std::endl;
+        int64_t kernel_time_ns = tapa::invoke(Llama2, FLAGS_bitstream,
+                        token, pos,
                         tapa::read_only_mmap<float>(token_emb_fpga),
                         tapa::read_only_mmap<float>(rms_att_w_fpga),
                         tapa::read_only_mmap<float>(rms_ffn_w_fpga),
@@ -338,6 +392,23 @@ int main(int argc, char *argv[]) {
                         tapa::read_only_mmap<float>(output_w_fpga),
                         tapa::write_only_mmap<float>(output)
                         );
+        if (temperature < EPS) {
+            next = argmax(output);
+        } else {
+            for (int q = 0; q < config.vocab_size; ++q)
+                output[q] /= temperature;
+            softmax_host(output, output);
+            next = sample(output);
+        }
+        if(pos < prompts.size()-1){
+            token = prompts[pos+1];
+        } else {
+            // std::cout << vocab[next];
+            // std::cout.flush();
+            token = next;
+        }
+        
+    }
     // for (int pos = 0; pos < config.seq_len; ++pos) {
     //     // forward the transformer to get logits for the next token
     //     transformer(token, pos, config, state, transformer_weights);

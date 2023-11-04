@@ -430,27 +430,25 @@ void matmul_logits(
     tapa::istream<float>& weight,
     tapa::ostream<float>& output
 ){
-    for(int l = 0; l < N_LAYERS; l++){
-        float input_cache[DIM];
-        for(int i = 0; i < DIM;){
-            if(!input.empty()){
-                float tmp; input.try_read(tmp);
-                input_cache[i] = tmp;
-                i++;
-            }
+    float input_cache[DIM];
+    for(int i = 0; i < DIM;){
+        if(!input.empty()){
+            float tmp; input.try_read(tmp);
+            input_cache[i] = tmp;
+            i++;
         }
+    }
 
-        for(int i = 0; i < VOCAB_SIZE; i++){
-            float val = 0.0;
-            for(int j = 0; j < DIM;){
-                if(!weight.empty()){
-                    float tmp_w; weight.try_read(tmp_w);
-                    val += tmp_w * input_cache[j];
-                    j++;
-                }
+    for(int i = 0; i < VOCAB_SIZE; i++){
+        float val = 0.0;
+        for(int j = 0; j < DIM;){
+            if(!weight.empty()){
+                float tmp_w; weight.try_read(tmp_w);
+                val += tmp_w * input_cache[j];
+                j++;
             }
-            output.write(val);
         }
+        output.write(val);
     }
 }
 

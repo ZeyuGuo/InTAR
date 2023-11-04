@@ -61,6 +61,13 @@ struct RunState {
     tensor3d value_cache;  // [layer, seq_len, dim]
 };
 
+struct AWQState {
+    std::vector<std::vector<int>> salient_kqv; 
+    std::vector<std::vector<int>> salient_attn_out;
+    std::vector<std::vector<int>> salient_w1_w3;
+    std::vector<std::vector<int>> salient_w2;
+};
+
 // --------------------------------------------------------------------------------------
 // Tensor allocation and deallocation
 
@@ -165,6 +172,44 @@ void checkpoint_init_weights(TransformerWeights &weights, Config &config, std::f
     checkpoint_init_tensor(weights.output_weight, file);
 }
 
+void load_awq_checkpoint(AWQState &state, std::fstream &file){
+    state.salient_kqv = std::vector<std::vector<int>>(32);
+    state.salient_attn_out = std::vector<std::vector<int>>(32);
+    state.salient_w1_w3 = std::vector<std::vector<int>>(32);
+    state.salient_w2 = std::vector<std::vector<int>>(32);
+
+    for(int i = 0; i < 32; i++){
+        int len;
+        file.read((char*)&len, sizeof(int));
+        for(int j = 0; j < len; j++){
+            int idx;
+            file.read((char*)&len, sizeof(int));
+            state.salient_kqv[i].push_back(idx);
+        }
+
+        file.read((char*)&len, sizeof(int));
+        for(int j = 0; j < len; j++){
+            int idx;
+            file.read((char*)&len, sizeof(int));
+            state.salient_attn_out[i].push_back(idx);
+        }
+
+        file.read((char*)&len, sizeof(int));
+        for(int j = 0; j < len; j++){
+            int idx;
+            file.read((char*)&len, sizeof(int));
+            state.salient_w1_w3[i].push_back(idx);
+        }
+
+        file.read((char*)&len, sizeof(int));
+        for(int j = 0; j < len; j++){
+            int idx;
+            file.read((char*)&len, sizeof(int));
+            state.salient_w2[i].push_back(idx);
+        }
+    }
+}
+
 // --------------------------------------------------------------------------------------
 // Neural net blocks
 
@@ -225,7 +270,38 @@ void print_tensor1d(tensor1d &values){
     std::cout << "\n";
 }
 
-void transformer(int token_index, int token_position, Config &config, RunState &state, TransformerWeights &transformer_weights) {
+void quantize_act(tensor1d& input, int w_bit, std::vector<int>& salient_idx, int q_group){
+    tensor1d output(input.size());
+    for(int i = 0; i < input.size() / q_group; i++){
+        // perform zero-point quantization
+        float min_val = input[i*q_group];
+        float max_val = input[i*q_group];
+        for(int j = 0; j < q_group; j++){
+            if(min_val > input[i*q_group+j]){
+                min_val = input[i*q_group+j];
+            }
+            if(max_val < input[i*q_group+j]){
+                max_val = input[i*q_group+j];
+            }
+        }
+        float max_int = std::pow(2, w_bit)-1;
+        float min_int = 0;
+        float scale = std::max(max_val - min_val, EPS) / max_int;
+        float zero = std::min(std::max(-std::round(min_val / scale), min_int), max_int);
+        for(int j = 0; j < q_group; j++){
+            float val = (std::min(std::max(std::round(input[i*q_group+j]/scale) + zero, min_int), max_int) - zero) * scale;
+            output[i*q_group+j] = val;
+        }
+    }
+    for(int idx : salient_idx){
+        output[idx] = input[idx];
+    }
+    for(int i = 0; i < input.size(); i++){
+        input[i] = output[i];
+    }
+}
+
+void transformer(int token_index, int token_position, Config &config, RunState &state, TransformerWeights &transformer_weights, AWQState &awq_state) {
     // a few convenience variables
     int dim = config.dim;
     int hidden_dim = config.hidden_dim;
@@ -239,6 +315,7 @@ void transformer(int token_index, int token_position, Config &config, RunState &
         rmsnorm(state.xb, state.x, transformer_weights.rms_att_weight[layer]);
 
         // attention
+        quantize_act(state.xb, 6, awq_state.salient_kqv[layer], 128);
         matmul(state.q, state.xb, transformer_weights.wq[layer]);
         matmul(state.k, state.xb, transformer_weights.wk[layer]);
         matmul(state.v, state.xb, transformer_weights.wv[layer]);
@@ -285,6 +362,8 @@ void transformer(int token_index, int token_position, Config &config, RunState &
             }
         }
 
+        quantize_act(state.xb, 6, awq_state.salient_attn_out[layer], 128);
+
         // final matmul to get the output of the attention
         matmul(state.xb2, state.xb, transformer_weights.wo[layer]);
 
@@ -296,6 +375,7 @@ void transformer(int token_index, int token_position, Config &config, RunState &
 
         // Now for FFN in PyTorch we have: self.w2(F.silu(self.w1(x))) * self.w3(x)
         // first calculate self.w1(x) and self.w3(x)
+        quantize_act(state.xb, 6, awq_state.salient_w1_w3[layer], 128);
         matmul(state.hb, state.xb, transformer_weights.w1[layer]);
         matmul(state.hb2, state.xb, transformer_weights.w3[layer]);
 
@@ -308,6 +388,7 @@ void transformer(int token_index, int token_position, Config &config, RunState &
             state.hb[i] = state.hb[i] * state.hb2[i];
         
         // final matmul to get the output of the ffn
+        quantize_act(state.hb, 6, awq_state.salient_w2[layer], 128);
         matmul(state.xb, state.hb, transformer_weights.w2[layer]);
 
         // residual connection
@@ -355,7 +436,7 @@ int main(int argc, char *argv[]) {
     // std::cout.tie(NULL);
 
     std::string checkpoint;
-    float temperature = 0.6;
+    float temperature = 0.75;
     // 'checkpoint' is a required arg
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " <checkpoint_file> [temperature]\n";
@@ -410,6 +491,20 @@ int main(int argc, char *argv[]) {
     RunState state;
     resize_state_tensors(state, config);
 
+    AWQState awq_state;
+    {
+        std::fstream file("awq_llama2.bin");
+        if(!file) {
+            std::cout
+                << "Unable to open the awq file awq_llama2.bin! \n";
+            return 1;
+        }
+        load_awq_checkpoint(awq_state, file);
+        file.close();
+    }
+
+     std::cout << "finish loading awq idx." << std::endl;
+
     // prompts
     std::vector<int> prompts = {1,  3439, 17632,  1925, 29892,   278,  6368,   310, 14215,   537,
           5922,   393, 29871};
@@ -423,7 +518,7 @@ int main(int argc, char *argv[]) {
     int token = prompts[0];  // 1 = BOS token in Llama-2 sentence-piece
     for (int pos = 0; pos < config.seq_len; ++pos) {
         // forward the transformer to get logits for the next token
-        transformer(token, pos, config, state, transformer_weights);
+        transformer(token, pos, config, state, transformer_weights, awq_state);
         if (temperature < EPS) {
             next = argmax(state.logits);
         } else {
