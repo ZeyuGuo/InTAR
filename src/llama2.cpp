@@ -436,7 +436,7 @@ int main(int argc, char *argv[]) {
     // std::cout.tie(NULL);
 
     std::string checkpoint;
-    float temperature = 0.75;
+    float temperature = 0.8;
     // 'checkpoint' is a required arg
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " <checkpoint_file> [temperature]\n";
