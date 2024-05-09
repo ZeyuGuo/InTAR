@@ -148,10 +148,7 @@ void pe_fluid(
     tapa::istream<int>& fifo_in_a,
     tapa::istream<int>& fifo_in_b,
     tapa::istream<int>& fifo_in_pe,
-    tapa::ostream<int>& fifo_out,
-    // interface to dsp
-    tapa::ostream<ap_uint<64>>& fifo_dsp_ops,
-    tapa::istream<int>& fifo_ret_val
+    tapa::ostream<int>& fifo_out
 ){
     for(;;){
 
@@ -172,21 +169,13 @@ load_vec:
 
         for(int i = 0; i < M; i++){
             int ans = 0;
-
 gemv:
-            for(int i_req = 0, i_resp = 0; i_resp < N;){
-                if((i_req < N) & !fifo_in_a.empty()){
+            for(int j = 0; j < N;){
+                #pragma HLS pipeline II=1
+                if(!fifo_in_a.empty()){
                     int a; fifo_in_a.try_read(a);
-                    ap_uint<64> ops = 0;
-                    ops(63, 32) = tapa::bit_cast<ap_uint<32>>(a);
-                    ops(31, 0) = tapa::bit_cast<ap_uint<32>>(cache_stage1[i_req]);
-                    fifo_dsp_ops.write(ops);
-                    i_req++;
-                }
-                if(!fifo_ret_val.empty()){
-                    int val; fifo_ret_val.try_read(val);
-                    ans += val;
-                    i_resp++;
+                    ans += a * cache_stage1[j];
+                    j++;
                 }
             }
             cache_stage2[i] = ans;
@@ -199,21 +188,10 @@ gemv:
             int b = fifo_in_pe.read();
 
 outer_prod:
-            for(int i_req = 0, i_resp = 0; i_resp < M*2;){
+            for(int j = 0; j < M*2; j++){
                 #pragma HLS pipeline II=1
-
-                if(i_req < M*2){
-                    ap_uint<64> ops = 0;
-                    ops(63, 32) = tapa::bit_cast<ap_uint<32>>(b);
-                    ops(31, 0) = tapa::bit_cast<ap_uint<32>>(cache_stage2[i_req]);
-                    fifo_dsp_ops.write(ops);
-                    i_req++;
-                }
-                if(!fifo_ret_val.empty()){
-                    int res; fifo_ret_val.try_read(res);
-                    fifo_out.write(res);
-                    i_resp++;
-                }
+                int res = b * cache_stage2[j];
+                fifo_out.write(res);
             }
         }
     }
@@ -273,8 +251,6 @@ void fluid_spatial_kernel(
     tapa::stream<int> fifo_mtx1("fifo_mtx1");
     tapa::stream<int> fifo_mtx2("fifo_mtx2");
     tapa::stream<int> fifo_pe_interconnect("fifo_pe_interconnect");
-    tapa::stream<ap_uint<64>, 6> fifo_dsp_ops("fifo_dsp_ops");
-    tapa::stream<int> fifo_ret_val("fifo_ret_val");
     tapa::stream<int> fifo_output("fifo_output");
     tapa::stream<bool> fifo_fin("fifo_fin");
     tapa::stream<int> fifo_signal("fifo_signal");
@@ -292,10 +268,7 @@ void fluid_spatial_kernel(
             fifo_mtx2, 
             fifo_vec2, 
             fifo_pe_interconnect, 
-            fifo_output, 
-            fifo_dsp_ops,
-            fifo_ret_val)
-        .invoke<tapa::detach>(pe_loop_shared, fifo_dsp_ops, fifo_ret_val)
+            fifo_output)
         .invoke<tapa::join>(write_mtx, output_size, output_mtx, fifo_output, fifo_fin)
         .invoke<tapa::join>(measure_cycle, fifo_fin, cycle_count);
 }
