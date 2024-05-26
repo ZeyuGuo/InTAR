@@ -1,0 +1,1 @@
+This is the directory for OPT 350M on-chip model with hybrid spatial architecture
