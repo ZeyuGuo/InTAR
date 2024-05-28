@@ -11,7 +11,8 @@ constexpr int D = 1024;
 constexpr int D_ffn = 4096;
 constexpr int N_head = 16;
 constexpr int MAX_SEQ_LEN = 1024;
-constexpr int NUM_SLR = 4;
+constexpr int NUM_SLR = 3;
+constexpr int NUM_DUM_SLR = 4;
 constexpr int D_head = D / N_head;
 constexpr int FFN_WEIGHT_SIZE = D * D_ffn;
 constexpr int OUT_WEIGHT_SIZE = D * D;
@@ -24,8 +25,8 @@ void opt_kernel(
     const int L,
     const int L_out,
     tapa::mmap<int> inst, // inst[0] = L, inst[1] = reload_weight
-    tapa::mmap<int> X_acc0,
-    tapa::mmap<int> X_acc1,
+    tapa::mmap<int_v16> X_acc0,
+    tapa::mmap<int_v16> X_acc1,
     tapa::mmap<int_v16> W_acc0,
     tapa::mmap<int_v16> W_acc1,
     tapa::mmaps<int, NUM_SLR> acc0_out,
@@ -49,17 +50,17 @@ int main(int argc, char *argv[]){
     aligned_vector<int> inst = {L, 1};
     aligned_vector<int> X_acc0(L * D);
     aligned_vector<int> X_acc1(L * D);
-    aligned_vector<int> W_acc0(D * D_head * NUM_SLR);
-    aligned_vector<int> W_acc1(D * D_head * NUM_SLR);
+    aligned_vector<int> W_acc0(D * D_head * NUM_DUM_SLR);
+    aligned_vector<int> W_acc1(D * D_head * NUM_DUM_SLR);
     vector<aligned_vector<int>> acc0_out(NUM_SLR, aligned_vector<int>(L * D_head));
     vector<aligned_vector<int>> acc1_out(NUM_SLR, aligned_vector<int>(L * D_head));
     aligned_vector<int> cycle_count(1);
 
 
-    vector<vector<int>> W_acc0_split(NUM_SLR, vector<int>(D * D_head));
-    vector<vector<int>> W_acc1_split(NUM_SLR, vector<int>(D * D_head));
-    vector<aligned_vector<int>> acc0_out_golden(NUM_SLR, aligned_vector<int>(L * D_head));
-    vector<aligned_vector<int>> acc1_out_golden(NUM_SLR, aligned_vector<int>(L * D_head));
+    vector<vector<int>> W_acc0_split(NUM_DUM_SLR, vector<int>(D * D_head));
+    vector<vector<int>> W_acc1_split(NUM_DUM_SLR, vector<int>(D * D_head));
+    vector<aligned_vector<int>> acc0_out_golden(NUM_DUM_SLR, aligned_vector<int>(L * D_head));
+    vector<aligned_vector<int>> acc1_out_golden(NUM_DUM_SLR, aligned_vector<int>(L * D_head));
 
     for(int i = 0; i < L * D; i++){
         int val = (rand() % 6) + 1;
@@ -67,13 +68,13 @@ int main(int argc, char *argv[]){
         X_acc1[i] = val;
     }
 
-    for(int i = 0; i < D * D_head * NUM_SLR; i++){
+    for(int i = 0; i < D * D_head * NUM_DUM_SLR; i++){
         int val = (rand() % 6) + 1;
         W_acc0[i] = val;
         W_acc0_split[(i / 4) % 4][(i / 16) * 4 + (i % 4)] = val;
     }
 
-    for(int i = 0; i < D * D_head * NUM_SLR; i++){
+    for(int i = 0; i < D * D_head * NUM_DUM_SLR; i++){
         int val = (rand() % 6) + 1;
         W_acc1[i] = val;
         W_acc1_split[(i / 4) % 4][(i / 16) * 4 + (i % 4)] = val;
@@ -110,8 +111,8 @@ int main(int argc, char *argv[]){
     int64_t kernel_time_ns = tapa::invoke(opt_kernel, FLAGS_bitstream,
         L * D, L * D_head,
         tapa::read_only_mmap<int>(inst), 
-        tapa::read_only_mmap<int>(X_acc0), 
-        tapa::read_only_mmap<int>(X_acc1), 
+        tapa::read_only_mmap<int>(X_acc0).reinterpret<int_v16>(), 
+        tapa::read_only_mmap<int>(X_acc1).reinterpret<int_v16>(), 
         tapa::read_only_mmap<int>(W_acc0).reinterpret<int_v16>(), 
         tapa::read_only_mmap<int>(W_acc1).reinterpret<int_v16>(), 
         tapa::write_only_mmaps<int, NUM_SLR>(acc0_out), 
