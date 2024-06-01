@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <ctime>
+#include <cmath>
 #include <tapa.h>
 #include <gflags/gflags.h>
 #include <ap_int.h>
@@ -31,8 +32,8 @@ void opt_kernel(
     tapa::mmap<int8_v64> X_acc1,
     tapa::mmap<int8_v64> W_acc0,
     tapa::mmap<int8_v64> W_acc1,
-    tapa::mmaps<int, NUM_SLR> acc0_out,
-    tapa::mmaps<int, NUM_SLR> acc1_out,
+    tapa::mmap<int> acc0_out,
+    tapa::mmap<int> acc1_out,
     tapa::mmap<int> cycle_count
 );
 
@@ -54,8 +55,8 @@ int main(int argc, char *argv[]){
     aligned_vector<ap_int<8>> X_acc1(L * D);
     aligned_vector<ap_int<8>> W_acc0(D * D_head * NUM_DUM_SLR/2);
     aligned_vector<ap_int<8>> W_acc1(D * D_head * NUM_DUM_SLR/2);
-    vector<aligned_vector<int>> acc0_out(NUM_SLR, aligned_vector<int>(L * D_head));
-    vector<aligned_vector<int>> acc1_out(NUM_SLR, aligned_vector<int>(L * D_head));
+    aligned_vector<int> acc0_out(NUM_SLR * L * D_head);
+    aligned_vector<int> acc1_out(NUM_SLR * L * D_head);
     aligned_vector<int> cycle_count(1);
 
 
@@ -96,7 +97,7 @@ int main(int argc, char *argv[]){
                 for(int l = 0; l < D; l++){
                     acc += X_copy[j*D+l] * W_acc0_split[i][l*D_head + k];
                 }
-                acc0_out_golden[i][j * D_head + k] = acc;
+                acc0_out_golden[i][j * D_head + k] = std::min(std::max((acc >> 8), -128), 127);
             }
         }
 
@@ -107,7 +108,7 @@ int main(int argc, char *argv[]){
                 for(int l = 0; l < D; l++){
                     acc += X_copy[j*D+l] * W_acc1_split[i][l*D_head + k];
                 }
-                acc1_out_golden[i][j * D_head + k] = acc;
+                acc1_out_golden[i][j * D_head + k] = std::min(std::max((acc >> 8), -128), 127);
             }
         }
     }
@@ -122,8 +123,8 @@ int main(int argc, char *argv[]){
         tapa::read_only_mmap<ap_int<8>>(X_acc1).reinterpret<int8_v64>(), 
         tapa::read_only_mmap<ap_int<8>>(W_acc0).reinterpret<int8_v64>(), 
         tapa::read_only_mmap<ap_int<8>>(W_acc1).reinterpret<int8_v64>(), 
-        tapa::write_only_mmaps<int, NUM_SLR>(acc0_out), 
-        tapa::write_only_mmaps<int, NUM_SLR>(acc1_out), 
+        tapa::write_only_mmap<int>(acc0_out), 
+        tapa::write_only_mmap<int>(acc1_out), 
         tapa::write_only_mmap<int>(cycle_count));
     
     std::clog << "cycle time: " << cycle_count[0] << std::endl;
@@ -134,8 +135,8 @@ int main(int argc, char *argv[]){
     // compare
     for(int i = 0; i < NUM_SLR; i++){
         for(int j = 0; j < L * D_head; j++){
-            if(acc1_out[i][j] != acc1_out_golden[i][j]){
-                 std::clog << "slr: " << i << ", index: " << j << ", actual: " << acc0_out[i][j] << ", expect: " << acc0_out_golden[i][j] << std::endl;
+            if(acc0_out[i*L*D_head+j]-acc0_out_golden[i][j] != 0){
+                 std::clog << "slr: " << i << ", index: " << j << ", actual: " << acc1_out[i*L*D_head+j] << ", expect: " << acc1_out_golden[i][j] << ", diff: " << acc1_out[i*L*D_head+j]-acc1_out_golden[i][j] << std::endl;
                  error++;
             }
         }
