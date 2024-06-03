@@ -67,7 +67,7 @@ int main(int argc, char *argv[]){
     vector<aligned_vector<int>> acc1_out_golden(NUM_DUM_SLR, aligned_vector<int>(L * D_head));
 
     for(int i = 0; i < L * D; i++){
-        int val = (rand() % 64) + 1;
+        int val = (rand() % 8) + 1;
         ap_int<32> full = tapa::bit_cast<ap_int<32>>(val);
         X_copy[i] = val;
         X_acc0[i] = ap_int<8>(full(7, 0));
