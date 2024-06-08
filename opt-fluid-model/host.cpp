@@ -34,7 +34,7 @@ void opt_kernel(
     tapa::mmap<ap_uint<512>> X_acc1,
     tapa::mmap<ap_uint<512>> W_acc0,
     tapa::mmap<ap_uint<512>> W_acc1,
-    tapa::mmap<ap_uint<64>> acc0_out,
+    tapa::mmaps<ap_uint<512>, NUM_SLR> acc0_out,
     tapa::mmap<ap_uint<64>> acc1_out,
     tapa::mmap<int> cycle_count
 );
@@ -57,7 +57,8 @@ int main(int argc, char *argv[]){
     aligned_vector<ap_int<8>> X_acc1(L * D);
     aligned_vector<ap_int<8>> W_acc0(D * D_head * NUM_DUM_SLR);
     aligned_vector<ap_int<8>> W_acc1(D * D_head * NUM_DUM_SLR);
-    aligned_vector<ap_uint<64>> acc0_out(NUM_SLR * L * D_head / 8);
+    // aligned_vector<ap_uint<64>> acc0_out(NUM_SLR * L * D_head / 8);
+    vector<aligned_vector<ap_uint<512>>> acc0_out(NUM_SLR, aligned_vector<ap_uint<512>>(L * L / 16));
     aligned_vector<ap_uint<64>> acc1_out(NUM_SLR * L * D_head / 8);
     aligned_vector<int> cycle_count(1);
 
@@ -66,7 +67,9 @@ int main(int argc, char *argv[]){
     vector<vector<int>> W_acc0_split(NUM_DUM_SLR, vector<int>(D * D_head));
     vector<vector<int>> W_acc1_split(NUM_DUM_SLR, vector<int>(D * D_head));
     vector<vector<int>> W_k_split(NUM_DUM_SLR, vector<int>(D * D_head));
-    vector<aligned_vector<int>> acc0_out_golden(NUM_DUM_SLR, aligned_vector<int>(L * D_head));
+    vector<aligned_vector<int>> q_golden(NUM_DUM_SLR, aligned_vector<int>(L * D_head));
+    vector<aligned_vector<int>> k_golden(NUM_DUM_SLR, aligned_vector<int>(L * D_head));
+    vector<aligned_vector<int>> attn_golden(NUM_DUM_SLR, aligned_vector<int>(L * L));
     vector<aligned_vector<int>> acc1_out_golden(NUM_DUM_SLR, aligned_vector<int>(L * D_head));
 
     for(int i = 0; i < L * D; i++){
@@ -102,16 +105,16 @@ int main(int argc, char *argv[]){
 
     // cpu 
     for(int i = 0; i < NUM_SLR; i++){
-        //WqX
-        // for(int j = 0; j < L; j++){
-        //     for(int k = 0; k < D_head; k++){
-        //         int acc = 0;
-        //         for(int l = 0; l < D; l++){
-        //             acc += X_copy[j*D+l] * W_acc0_split[i][l*D_head + k];
-        //         }
-        //         acc0_out_golden[i][j * D_head + k] = std::min(std::max((acc >> 8), -128), 127);
-        //     }
-        // }
+        // WqX
+        for(int j = 0; j < L; j++){
+            for(int k = 0; k < D_head; k++){
+                int acc = 0;
+                for(int l = 0; l < D; l++){
+                    acc += X_copy[j*D+l] * W_acc0_split[i][l*D_head + k];
+                }
+                q_golden[i][j * D_head + k] = std::min(std::max((acc >> 8), -128), 127);
+            }
+        }
 
         //WvX
         for(int j = 0; j < L; j++){
@@ -131,7 +134,18 @@ int main(int argc, char *argv[]){
                 for(int l = 0; l < D; l++){
                     acc += X_copy[j*D+l] * W_k_split[i][l*D_head + k];
                 }
-                acc0_out_golden[i][j * D_head + k] = std::min(std::max((acc >> 8), -128), 127);
+                k_golden[i][j * D_head + k] = std::min(std::max((acc >> 8), -128), 127);
+            }
+        }
+
+        // QK^T
+        for(int j = 0; j < L; j++){
+            for(int k = 0; k < L; k++){
+                int acc = 0;
+                for(int l = 0; l < D_head; l++){
+                    acc += q_golden[i][k*D_head+l] * k_golden[i][j*D_head+l];
+                }
+                attn_golden[i][j*D_head+k] = acc;
             }
         }
     }
@@ -146,7 +160,7 @@ int main(int argc, char *argv[]){
         tapa::read_only_mmap<ap_int<8>>(X_acc1).reinterpret<ap_uint<512>>(), 
         tapa::read_only_mmap<ap_int<8>>(W_acc0).reinterpret<ap_uint<512>>(), 
         tapa::read_only_mmap<ap_int<8>>(W_acc1).reinterpret<ap_uint<512>>(), 
-        tapa::write_only_mmap<ap_uint<64>>(acc0_out), 
+        tapa::write_only_mmaps<ap_uint<512>, NUM_SLR>(acc0_out), 
         tapa::write_only_mmap<ap_uint<64>>(acc1_out), 
         tapa::write_only_mmap<int>(cycle_count));
     
@@ -157,10 +171,12 @@ int main(int argc, char *argv[]){
 
     // compare
     for(int i = 0; i < NUM_SLR; i++){
-        for(int j = 0; j < L * D_head; j++){
-            if((int)(ap_int<8>(acc0_out[i*L*D_head/8+j/8]((j%8)*8+7, (j%8)*8)))-acc0_out_golden[i][j] != 0){
-                 std::clog << "slr: " << i << ", index: " << j << ", actual: " << ap_int<8>(acc0_out[i*L*D_head/8+j/8]((j%8)*8+7, (j%8)*8)) << ", expect: " << acc0_out_golden[i][j] << std::endl;
-                 error++;
+        for(int j = 0; j < 4; j++){
+            for(int k = 0; k < 16; k++){
+                if(tapa::bit_cast<int>(ap_int<32>(acc0_out[i][j](k*32+31,k*32)))-attn_golden[i][j*16+k] != 0){
+                    std::clog << "slr: " << i << ", index: " << j << ", actual: " << tapa::bit_cast<int>(ap_int<32>(acc0_out[i][j](k*32+31,k*32))) << ", expect: " << attn_golden[i][j*16+k] << std::endl;
+                    error++;
+                }
             }
         }
     }

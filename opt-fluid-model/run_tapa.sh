@@ -2,7 +2,7 @@ tapac \
     -o opt.hw.xo \
     --platform xilinx_u280_xdma_201920_3 \
     --top opt_kernel \
-    --work-dir opt-stage2.tapa \
+    --work-dir opt-stage3.tapa \
     --connectivity hbm_config.ini \
     --enable-hbm-binding-adjustment \
     --enable-synth-util \
