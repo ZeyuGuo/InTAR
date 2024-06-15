@@ -7,6 +7,7 @@ constexpr int D = 1024;
 constexpr int D_ffn = 4096;
 constexpr int N_head = 16;
 constexpr int MAX_SEQ_LEN = 1024;
+constexpr int MAX_SEQ_LEN_div_2 = MAX_SEQ_LEN / 2;
 constexpr int NUM_SLR = 3;
 constexpr int NUM_DUM_SLR = 4;
 constexpr int TOTAL_PORT = NUM_SLR * 2;
@@ -161,9 +162,9 @@ void write_attention(
     tapa::async_mmap<ap_uint<512>>& output_mtx,
     tapa::istream<ap_uint<512>>& fifo_in
 ){
-    for(int i_req = 0, i_resp = 0; i_resp < (L * L / 16);){
+    for(int i_req = 0, i_resp = 0; i_resp < (L * L / 64);){
         #pragma HLS pipeline II=1
-        if((i_req < (L * L / 16)) & !fifo_in.empty() & !output_mtx.write_addr.full() & !output_mtx.write_data.full()){
+        if((i_req < (L * L / 64)) & !fifo_in.empty() & !output_mtx.write_addr.full() & !output_mtx.write_data.full()){
             output_mtx.write_addr.try_write(i_req);
             ap_uint<512> tmp; fifo_in.try_read(tmp);
             output_mtx.write_data.try_write(tmp);
@@ -191,7 +192,7 @@ void temporal_acc0_slr0(
 
     ap_uint<64> scratchpad_q[MAX_SEQ_LEN][D_head_div_8]; // 8 bit
     ap_uint<64> scratchpad_k[MAX_SEQ_LEN][D_head_div_8]; // 8 bit
-    #pragma HLS array_partition variable=scratchpad_q cyclic dim=1 factor=32
+    #pragma HLS array_partition variable=scratchpad_q cyclic dim=1 factor=64
     #pragma HLS array_partition variable=scratchpad_q dim=2 complete
     #pragma HLS array_partition variable=scratchpad_k cyclic dim=1 factor=4
     #pragma HLS array_partition variable=scratchpad_k dim=2 complete
@@ -243,7 +244,7 @@ void temporal_acc0_slr0(
         int k_bound = (stage == 2) ? D_head_div_8 : D_div_8;
         
         // stage 1: compute Q 
-        for(int i = (start >> 2); i < (end >> 2); i++){ // make sure L is multiple of 4
+        for(int i = (start >> 2); i < (end >> 2); i++){ // make sure L is multiple of 64
             for(int j = 0; j < j_bound; j++){
 
                 if(stage == 0){
@@ -428,7 +429,7 @@ void temporal_acc0(
 
     ap_uint<64> scratchpad_q[MAX_SEQ_LEN][D_head_div_8]; // 8 bit
     ap_uint<64> scratchpad_k[MAX_SEQ_LEN][D_head_div_8]; // 8 bit
-    #pragma HLS array_partition variable=scratchpad_q cyclic dim=1 factor=32
+    #pragma HLS array_partition variable=scratchpad_q cyclic dim=1 factor=64
     #pragma HLS array_partition variable=scratchpad_q dim=2 complete
     #pragma HLS array_partition variable=scratchpad_k cyclic dim=1 factor=4
     #pragma HLS array_partition variable=scratchpad_k dim=2 complete
@@ -652,6 +653,7 @@ void temporal_acc1_slr0(
 
         // stage 0: WvX
         // stage 1: WkX1 -> acc0
+        // stage 2: Softmax(QK)V <- acc0
 
         ap_uint<64> W[D][D_head_div_16]; // 4 bit
         #pragma HLS array_partition variable=W cyclic dim=1 factor=4
@@ -965,6 +967,141 @@ write:
     }
 }
 
+void sfu_buffer( // double buffering
+    const int L,
+    tapa::istream<ap_uint<512>>& fifo_data_in,
+    tapa::ostream<ap_uint<512>>& fifo_data_out
+){
+    for(int stage = 0; stage < 1; stage++){
+
+        for(int l = 0; l < (L >> 5); l++){
+            float sum[8][16];
+            float cache[MAX_SEQ_LEN][16];
+            #pragma HLS array_partition variable=cache dim=2 complete
+            #pragma HLS array_partition variable=sum dim=2 complete
+            
+            for(int i = 0; i < 8; i++){
+                for(int j = 0; j < 16; j++){
+                    #pragma HLS unroll
+                    sum[i][j] = 0.0;
+                }
+            }
+
+        acc:
+            for(int i = 0; i < L; i++){
+                #pragma HLS pipeline II=1
+                #pragma HLS dependence false variable=sum
+                #pragma HLS dependence true variable=sum distance=8
+                ap_uint<512> tmp = fifo_data_in.read();
+                for(int k = 0; k < 16; k++){
+                    #pragma HLS unroll
+                    float res = tapa::bit_cast<float>(ap_int<32>(tmp(k*32+31, k*32)));
+                    sum[i%8][k] += res;
+                    cache[i][k] = res;
+                }
+            }
+
+        reduce:
+            for(int i = 1; i < 8; i++){
+                for(int j = 0; j < 8; j++){
+                    #pragma HLS pipeline II=1
+                    #pragma HLS dependence true variable=sum distance=8
+                    for(int k = 0; k < 2; k++){
+                        sum[0][j*2+k] += sum[i][j*2+k];
+                    }
+                }
+            }
+
+            ap_uint<512> tmp;
+            for(int i = 0; i < 16; i++){
+                #pragma HLS unroll
+                tmp(i*32+31, i*32) = tapa::bit_cast<ap_uint<32>>(sum[0][i]);
+            }
+            fifo_data_out.write(tmp);
+
+        write:
+            for(int i = 0; i < L; i++){
+                #pragma HLS pipeline II=1
+                ap_uint<512> tmp;
+                for(int j = 0; j < 16; j++){
+                    #pragma HLS unroll
+                    tmp(j*32+31, j*32) = tapa::bit_cast<ap_uint<32>>(cache[i][j]);
+                }
+                fifo_data_out.write(tmp);
+            }
+
+        }
+    }
+
+}
+
+void sfu_acc_exp(
+    const int L,
+    tapa::istream<ap_uint<512>>& fifo_data_in,
+    tapa::ostreams<ap_uint<512>, 2>& fifo_buf
+) {
+    for(int stage = 0; stage < 1; stage++){
+
+        for(int l = 0; l < (L >> 4); l++){
+
+            for(int i = 0; i < L;){
+                #pragma HLS pipeline II=1
+                if(!fifo_data_in.empty()){
+                    ap_uint<512> tmp; fifo_data_in.try_read(tmp);
+                    ap_uint<512> tmp_o;
+                    for(int k = 0; k < 16; k++){
+                        #pragma HLS unroll
+                        int res = tapa::bit_cast<int>(ap_int<32>(tmp(k*32+31, k*32)));
+                        float res_exp = std::exp((float)(res >> 3));
+                        tmp_o(k*32+31, k*32) = tapa::bit_cast<ap_uint<32>>(res_exp);
+                    }
+                    fifo_buf[l%2].write(tmp_o);
+                    i++;
+                }
+            }
+        }
+    }
+}
+
+void sfu_norm(
+    const int L,
+    tapa::istreams<ap_uint<512>, 2>& fifo_buf,
+    tapa::ostream<ap_uint<512>>& fifo_data_out
+){
+    for(int stage = 0; stage < 1; stage++){
+
+        for(int l = 0; l < (L >> 4); l++){
+            float sum[16];
+            #pragma HLS array_partition variable=sum complete
+
+            ap_uint<512> tmp_in = fifo_buf[l%2].read();
+
+            for(int i = 0; i < 16; i++){
+                #pragma HLS unroll
+                sum[i] = 64.0 / tapa::bit_cast<float>(ap_uint<32>(tmp_in(i*32+31, i*32)));
+            }
+
+            for(int i = 0; i < (L >> 2); i++){
+                ap_uint<512> tmp;
+                for(int k = 0; k < 4;){
+                    #pragma HLS pipeline II=1
+                    if(!fifo_buf[l%2].empty()){
+                        ap_uint<512> tmp_cache; fifo_buf[l%2].try_read(tmp_cache);
+                        for(int j = 0; j < 16; j++){
+                            #pragma HLS unroll
+                            int res = tapa::bit_cast<float>(ap_uint<32>(tmp_cache(j*32+31, j*32))) * sum[j];
+                            res = std::min(std::max(res, -128), 127);
+                            tmp(k*128 + j*8 + 7, k*128 + j*8) = ap_int<8>(res);
+                        }
+                        k++;
+                    }
+                }
+                fifo_data_out.write(tmp);
+            }
+        }
+    }
+}
+
 
 void measure_cycle(tapa::istreams<bool, TOTAL_PORT>& fifo_fin, tapa::mmap<int> cycle_count){
     for(int cycle = 0;;cycle++){
@@ -1004,7 +1141,10 @@ void opt_kernel(
     tapa::streams<ap_uint<256>, NUM_SLR, 16> fifo_X_acc1("fifo_X_acc1");
     tapa::streams<ap_uint<512>, NUM_SLR+1> fifo_W_acc0("fifo_W_acc0");
     tapa::streams<ap_uint<512>, NUM_SLR+1> fifo_W_acc1("fifo_W_acc1");
-    tapa::streams<ap_uint<512>, NUM_SLR, 16> fifo_acc0_out("fifo_acc0_out");
+    tapa::streams<ap_uint<512>, NUM_SLR, 4> fifo_acc0_out("fifo_acc0_out");
+    tapa::streams<ap_uint<512>, NUM_SLR> fifo_acc0_to_sfu("fifo_acc0_to_sfu");
+    tapa::streams<ap_uint<512>, NUM_SLR*2> fifo_sfu_buf_in("fifo_sfu_buf_in");
+    tapa::streams<ap_uint<512>, NUM_SLR*2> fifo_sfu_buf_out("fifo_sfu_buf_out");
     tapa::streams<ap_uint<64>, NUM_SLR> fifo_acc1_out("fifo_acc1_out");
     tapa::streams<ap_uint<512>, NUM_SLR, 4> fifo_from_acc1_to_acc0("fifo_from_acc1_to_acc0");
     tapa::streams<bool, NUM_SLR*2> fifo_fin("fifo_fin");
@@ -1022,7 +1162,7 @@ void opt_kernel(
             fifo_X_acc0_slr0, fifo_X_acc0,
             fifo_W_acc0, fifo_W_acc0,
             fifo_from_acc1_to_acc0,
-            fifo_acc0_out,
+            fifo_acc0_to_sfu,
             fifo_fin
         )
         .invoke<tapa::join>(
@@ -1043,7 +1183,7 @@ void opt_kernel(
             fifo_X_acc0, fifo_X_acc0,
             fifo_W_acc0, fifo_W_acc0,
             fifo_from_acc1_to_acc0,
-            fifo_acc0_out,
+            fifo_acc0_to_sfu,
             fifo_fin
         )
         .invoke<tapa::join, NUM_SLR-1>(
@@ -1056,6 +1196,21 @@ void opt_kernel(
             fifo_from_acc1_to_acc0,
             fifo_acc1_out,
             fifo_fin
+        )
+        .invoke<tapa::join, NUM_SLR>(
+            sfu_acc_exp, seq_len,
+            fifo_acc0_to_sfu,
+            fifo_sfu_buf_in
+        )
+        .invoke<tapa::join, NUM_SLR*2>(
+            sfu_buffer, seq_len,
+            fifo_sfu_buf_in,
+            fifo_sfu_buf_out
+        )
+        .invoke<tapa::join, NUM_SLR>(
+            sfu_norm, seq_len,
+            fifo_sfu_buf_out,
+            fifo_acc0_out
         )
         .invoke<tapa::join, NUM_SLR>(write_attention, seq_len, acc0_out, fifo_acc0_out)
         .invoke<tapa::join>(write_mtx, L_out, acc1_out, fifo_acc1_out)
