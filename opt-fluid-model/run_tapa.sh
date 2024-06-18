@@ -11,6 +11,5 @@ tapac \
     --min-slr-width-limit 5000 \
     --max-slr-width-limit 19000 \
     --max-parallel-synth-jobs 16 \
-    --floorplan-strategy SLR_LEVEL_FLOORPLANNING \
     --floorplan-output opt-floorplan.tcl \
     kernel.cpp 

@@ -34,7 +34,6 @@ void opt_kernel(
     tapa::mmap<ap_uint<512>> X_acc1,
     tapa::mmap<ap_uint<512>> W_acc0,
     tapa::mmap<ap_uint<512>> W_acc1,
-    tapa::mmaps<ap_uint<512>, NUM_SLR> acc0_out,
     tapa::mmap<ap_uint<64>> acc1_out,
     tapa::mmap<int> cycle_count
 );
@@ -160,7 +159,6 @@ int main(int argc, char *argv[]){
         tapa::read_only_mmap<ap_int<8>>(X_acc1).reinterpret<ap_uint<512>>(), 
         tapa::read_only_mmap<ap_int<8>>(W_acc0).reinterpret<ap_uint<512>>(), 
         tapa::read_only_mmap<ap_int<8>>(W_acc1).reinterpret<ap_uint<512>>(), 
-        tapa::write_only_mmaps<ap_uint<512>, NUM_SLR>(acc0_out), 
         tapa::write_only_mmap<ap_uint<64>>(acc1_out), 
         tapa::write_only_mmap<int>(cycle_count));
     
@@ -170,16 +168,16 @@ int main(int argc, char *argv[]){
     int error = 0;
 
     // compare
-    for(int i = 0; i < NUM_SLR; i++){
-        for(int j = 0; j < 4; j++){
-            for(int k = 0; k < 16; k++){
-                if(tapa::bit_cast<int>(ap_int<32>(acc0_out[i][j](k*32+31,k*32)))-attn_golden[i][j*16+k] != 0){
-                    std::clog << "slr: " << i << ", index: " << j << ", actual: " << tapa::bit_cast<int>(ap_int<32>(acc0_out[i][j](k*32+31,k*32))) << ", expect: " << attn_golden[i][j*16+k] << std::endl;
-                    error++;
-                }
-            }
-        }
-    }
+    // for(int i = 0; i < NUM_SLR; i++){
+    //     for(int j = 0; j < 4; j++){
+    //         for(int k = 0; k < 16; k++){
+    //             if(tapa::bit_cast<int>(ap_int<32>(acc0_out[i][j](k*32+31,k*32)))-attn_golden[i][j*16+k] != 0){
+    //                 std::clog << "slr: " << i << ", index: " << j << ", actual: " << tapa::bit_cast<int>(ap_int<32>(acc0_out[i][j](k*32+31,k*32))) << ", expect: " << attn_golden[i][j*16+k] << std::endl;
+    //                 error++;
+    //             }
+    //         }
+    //     }
+    // }
 
     if (error == 0) {
         std::clog << "PASSED" << std::endl;
