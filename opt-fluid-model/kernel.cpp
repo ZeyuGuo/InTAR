@@ -8,6 +8,7 @@ constexpr int D_ffn = 4096;
 constexpr int N_head = 16;
 constexpr int MAX_SEQ_LEN = 1024;
 constexpr int MAX_SEQ_LEN_div_2 = MAX_SEQ_LEN / 2;
+constexpr int MAX_SEQ_LEN_div_8 = MAX_SEQ_LEN / 8;
 constexpr int NUM_SLR = 3;
 constexpr int NUM_DUM_SLR = 4;
 constexpr int TOTAL_PORT = NUM_SLR * 2;
@@ -675,9 +676,9 @@ void temporal_acc1_slr0(
         
         for(int i = (start >> 4); i < (end >> 4); i++){ // make sure L is multiple of 4
 
-            ap_uint<64> cache_attn[MAX_SEQ_LEN][2];
+            ap_uint<64> cache_attn[MAX_SEQ_LEN_div_8][16];
             #pragma HLS array_partition variable=cache_attn dim=2 complete
-            #pragma HLS array_partition variable=cache_attn dim=1 cyclic factor=8
+            #pragma HLS array_partition variable=cache_attn dim=1 cyclic factor=2
 
             if(stage == 0){
                 for(int ii = 0; ii < 2; ii++){ // load only 1 time
@@ -700,10 +701,10 @@ void temporal_acc1_slr0(
                     #pragma HLS pipeline II=1
                     if(!fifo_from_sfu.empty()){
                         ap_uint<128> val; fifo_from_sfu.try_read(val);
-                        
-                        for(int k = 0; k < 2; k++){
+                        int offset = ii % 8;
+                        for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
-                            cache_attn[ii][k] = ap_uint<64>(val(k*64+63, k*64));
+                            cache_attn[ii/8][k](offset*8+7, offset*8) = ap_int<8>(val(k*8+7, k*8));
                         }
                         ii++;
                     }
@@ -744,7 +745,7 @@ void temporal_acc1_slr0(
                             op2_mtx[ii] = X[i*16+ii][k];
                         } else {
                             op1_mtx[ii] = scratchpad[k*8+ii/2][j*2+(ii%2)]; // convert the dimension
-                            op2_mtx[ii] = cache_attn[k*8+ii/2][ii%2];
+                            op2_mtx[ii] = cache_attn[k][ii];
                         }
                     }
 
@@ -811,7 +812,7 @@ void temporal_acc1_slr0(
                             #pragma HLS unroll
                             int offset = k%8;
                             if(stage == 0){
-                                scratchpad[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k]);
+                                scratchpad[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[k][ii]);
                             } else {
                                 scratchpad_out[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k]);
                             }
@@ -906,9 +907,9 @@ void temporal_acc1(
         
         for(int i = (start >> 4); i < (end >> 4); i++){ // make sure L is multiple of 4
 
-            ap_uint<64> cache_attn[MAX_SEQ_LEN][2];
+            ap_uint<64> cache_attn[MAX_SEQ_LEN_div_8][16];
             #pragma HLS array_partition variable=cache_attn dim=2 complete
-            #pragma HLS array_partition variable=cache_attn dim=1 cyclic factor=8
+            #pragma HLS array_partition variable=cache_attn dim=1 cyclic factor=2
 
             if(stage == 2){
             load_attn:
@@ -916,10 +917,10 @@ void temporal_acc1(
                     #pragma HLS pipeline II=1
                     if(!fifo_from_sfu.empty()){
                         ap_uint<128> val; fifo_from_sfu.try_read(val);
-                        
-                        for(int k = 0; k < 2; k++){
+                        int offset = ii % 8;
+                        for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
-                            cache_attn[ii][k] = ap_uint<64>(val(k*64+63, k*64));
+                            cache_attn[ii/8][k](offset*8+7, offset*8) = ap_int<8>(val(k*8+7, k*8));
                         }
                         ii++;
                     }
@@ -967,7 +968,7 @@ void temporal_acc1(
                             op2_mtx[ii] = recv_pkt(ii*64+63, ii*64);
                         } else {
                             op1_mtx[ii] = scratchpad[k*8+ii/2][j*2+(ii%2)];
-                            op2_mtx[ii] = cache_attn[k*8+ii/2][ii%2];
+                            op2_mtx[ii] = cache_attn[k][ii];
                         }
                     }
                     
@@ -1026,7 +1027,7 @@ void temporal_acc1(
                             #pragma HLS unroll
                             int offset = k%8;
                             if(stage == 0){
-                                scratchpad[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k]);
+                                scratchpad[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[k][ii]);
                             } else {
                                 scratchpad_out[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k]);
                             }
@@ -1142,7 +1143,9 @@ void sfu_acc_exp(
                     for(int k = 0; k < 16; k++){
                         #pragma HLS unroll
                         int res = tapa::bit_cast<int>(ap_int<32>(tmp(k*32+31, k*32)));
-                        float res_exp = std::exp((float)(res >> 3));
+                        float res_exp = 0.0;
+                        #pragma HLS bind_op variable=res_exp op=fexp impl=meddsp
+                        res_exp = std::exp((float)(res >> 10));
                         tmp_o(k*32+31, k*32) = tapa::bit_cast<ap_uint<32>>(res_exp);
                     }
                     fifo_buf[l%2].write(tmp_o);
