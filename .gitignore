@@ -1,3 +1,7 @@
 *.log
 llama2
 run
+*/*.tapa
+*/vitis_run_hw
+*/vitis_run_hw_emu
+*/.ipcache

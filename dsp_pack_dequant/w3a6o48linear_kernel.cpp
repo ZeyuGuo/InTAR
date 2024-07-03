@@ -89,15 +89,15 @@ void compute(
 }
 
 void dequantize(
-    tapa::istream<ap_int<48>>& z,
+    tapa::istreams<ap_int<48>, 3>& z,
     tapa::istream<float>& scale,
     tapa::ostream<float>& output
 ){
-    for(;;){
+    for(int c_idx = 0;;){
         #pragma HLS pipeline II=1
         
-        if(!z.empty() & !scale.empty()){
-            ap_int<48> val; z.try_read(val);
+        if(!z[c_idx].empty() & !scale.empty()){
+            ap_int<48> val; z[c_idx].try_read(val);
             float s; scale.try_read(s);
             // unpack val
             ap_int<12> z0 = val(11, 0);
@@ -117,6 +117,8 @@ void dequantize(
             int sum = z0 + z1 + z2;
             float out = s * (float)sum;
             output.write(out);
+            c_idx++;
+            if(c_idx == 3) c_idx = 0;
         }
     }
 }
@@ -156,24 +158,24 @@ void w3a6o48linear(
     const int LW,
     const int LA,
     const int LS,
-    tapa::mmap<ap_int<27>> w,
-    tapa::mmap<ap_int<18>> a,
+    tapa::mmaps<ap_int<27>, 3> w,
+    tapa::mmaps<ap_int<18>, 3> a,
     tapa::mmap<float> scale,
     tapa::mmap<float> o,
     tapa::mmap<int> cycle_count
 ){
-    tapa::stream<ap_int<27>> fifo_weight("fifo_weight");
-    tapa::stream<ap_int<18>> fifo_act("fifo_act");
+    tapa::streams<ap_int<27>, 3> fifo_weight("fifo_weight");
+    tapa::streams<ap_int<18>, 3> fifo_act("fifo_act");
     tapa::stream<float> fifo_scale("fifo_scale");
     tapa::stream<float> fifo_output("fifo_output");
-    tapa::stream<ap_int<48>> fifo_deq("fifo_deq");
+    tapa::streams<ap_int<48>, 3> fifo_deq("fifo_deq");
     tapa::stream<bool> fifo_fin("fifo_fin");
 
     tapa::task()
-        .invoke<tapa::join>(read_w, LW, w, fifo_weight)
-        .invoke<tapa::join>(read_a, LA, a, fifo_act)
+        .invoke<tapa::join, 3>(read_w, LW, w, fifo_weight)
+        .invoke<tapa::join, 3>(read_a, LA, a, fifo_act)
         .invoke<tapa::join>(read_scale, LS, scale, fifo_scale)
-        .invoke<tapa::detach>(compute, fifo_weight, fifo_act, fifo_deq)
+        .invoke<tapa::detach, 3>(compute, fifo_weight, fifo_act, fifo_deq)
         .invoke<tapa::detach>(dequantize, fifo_deq, fifo_scale, fifo_output)
         .invoke<tapa::join>(write_o, LS, o, fifo_output, fifo_fin)
         .invoke<tapa::join>(measure_cycle, fifo_fin, cycle_count);
