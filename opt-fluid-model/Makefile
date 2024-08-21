@@ -21,7 +21,7 @@ host_opencl.o: host_opencl.cpp
 	$(ARMGCC) -c -D__USE_XOPEN2K8 -I$(SYSROOT)/usr/include/xrt -I$(XILINX_VIVADO)/include -I$(SYSROOT)/usr/include -I$(XILINX_HLS)/include -fmessage-length=0 -std=c++17 --sysroot=$(SYSROOT) -o $@ $^
 
 opt350-versal: kernel-versal.cpp host-versal.cpp
-	$(GCC) -o $@ -O2 -Wall $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lglog -lgflags -lm -lOpenCL -I$(XILINX_HLS)/include 
+	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lglog -lgflags -lm -lOpenCL -I$(XILINX_HLS)/include 
 
 clean:
 	rm opt350-new opt-versal

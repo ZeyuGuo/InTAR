@@ -1,6 +1,7 @@
 from rapidstream import RapidStreamTAPA, DeviceFactory
 
 rs = RapidStreamTAPA("rs_build/")
+rs.reset()
 factory = DeviceFactory(
     row=4,
     col=2,
@@ -33,10 +34,10 @@ factory.extract_slot_resources()
 device = factory.generate_virtual_device()
 rs.set_virtual_device(device)
 
-rs.add_xo_file("./opt-stage4-versal.tapa/opt-2023.hw.xo")
+rs.add_xo_file("./opt-stage4-dot-prod.tapa/opt.hw.xo")
 rs.set_top_module_name("opt_kernel")
 rs.add_clock("ap_clk", period_ns=3.33)
 
 rs.set_vitis_connectivity_config("link_config_versal.ini")
 rs.assign_port_to_region(".*", "SLOT_X0Y0:SLOT_X1Y0")
-rs.run_dse(max_workers=1, max_dse_limit=0.8, min_dse_limit=0.6)
+rs.run_dse(max_workers=1, max_dse_limit=0.9, min_dse_limit=0.6)
