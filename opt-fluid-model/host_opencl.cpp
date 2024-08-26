@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
     const int L = 256;
     const int D = 1024;
     const int NUM_DUM_SLR = 4;
-    const int NUM_SLR = 3;
+    const int NUM_SLR = 4;
     const int D_head = 64;
 
     // Creates a vector of DATA_SIZE elements with an initial value of 10 and 32
@@ -213,13 +213,17 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Finish assigning values\n";
 
+    cl::Event event;
+    uint64_t nstimestart, nstimeend;
+    uint64_t exe_time = 0;
+
     // Data will be migrated to kernel space
     OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_X_acc0, buffer_X_acc1, buffer_W_acc0, buffer_W_acc1}, 0 /* 0 means from host*/));
 
     std::cout << "Start kernel\n";
 
     // Launch the Kernel
-    OCL_CHECK(err, err = q.enqueueTask(krnl_vector_add));
+    OCL_CHECK(err, err = q.enqueueTask(krnl_vector_add, nullptr, &event));
 
     std::cout << "Finish kernel\n";
 
@@ -231,6 +235,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Receive data\n";
 
     OCL_CHECK(err, q.finish());
+    OCL_CHECK(err, err = event.getProfilingInfo<uint64_t>(CL_PROFILING_COMMAND_START, &nstimestart));
+    OCL_CHECK(err, err = event.getProfilingInfo<uint64_t>(CL_PROFILING_COMMAND_END, &nstimeend));
+    exe_time += nstimeend - nstimestart;
 
     // Verify the result
     int match = 0;
@@ -243,6 +250,7 @@ int main(int argc, char* argv[]) {
     //     }
     // }
     std::cout << "Cycle count: " << cycle[0] << std::endl;
+    std::cout << "Latency: " << exe_time << " ns" << std::endl;
 
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(buffer_X_acc0, X_acc0));
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(buffer_X_acc1, X_acc1));
