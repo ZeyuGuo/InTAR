@@ -63,7 +63,7 @@ static const std::string error_message =
 
 int main(int argc, char* argv[]) {
     // TARGET_DEVICE macro needs to be passed from gcc command line
-    if (argc != 2) {
+    if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " <xclbin>" << std::endl;
         return EXIT_FAILURE;
     }
@@ -72,7 +72,10 @@ int main(int argc, char* argv[]) {
 
     // Compute the size of array in bytes
     size_t size_in_bytes = DATA_SIZE * sizeof(int);
-    const int L = 256;
+    int L = 64;
+    if (argc == 3) {
+        L = atoi(argv[2]);
+    }
     const int D = 1024;
     const int NUM_DUM_SLR = 4;
     const int NUM_SLR = 4;
@@ -156,8 +159,8 @@ int main(int argc, char* argv[]) {
     OCL_CHECK(err, cl::Buffer buffer_X_acc1(context, CL_MEM_READ_ONLY, (size_t)(L*D), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_W_acc0(context, CL_MEM_READ_ONLY, (size_t)(D * D_head * NUM_DUM_SLR * 8), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_W_acc1(context, CL_MEM_READ_ONLY, (size_t)(D * D_head * NUM_DUM_SLR * 8), NULL, &err));
-    OCL_CHECK(err, cl::Buffer buffer_acc0_out(context, CL_MEM_WRITE_ONLY, (size_t)(NUM_SLR * L * D), NULL, &err));
-    OCL_CHECK(err, cl::Buffer buffer_acc1_out(context, CL_MEM_WRITE_ONLY, (size_t)(NUM_SLR * L * D), NULL, &err));
+    OCL_CHECK(err, cl::Buffer buffer_acc0_out(context, CL_MEM_WRITE_ONLY, (size_t)(NUM_SLR * L * D * 2), NULL, &err));
+    // OCL_CHECK(err, cl::Buffer buffer_acc1_out(context, CL_MEM_WRITE_ONLY, (size_t)(NUM_SLR * L * D), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_cycle(context, CL_MEM_WRITE_ONLY, sizeof(int), NULL, &err));
 
     std::cout << "Finish creating buffer\n";
@@ -165,14 +168,14 @@ int main(int argc, char* argv[]) {
     // set the kernel Arguments
     int narg = 0;
     OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, L*D));
-    OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, L*D/8));
+    OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, L*D/16));
     OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, L));
     OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, buffer_X_acc0));
     OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, buffer_X_acc1));
     OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, buffer_W_acc0));
     OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, buffer_W_acc1));
     OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, buffer_acc0_out));
-    OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, buffer_acc1_out));
+    // OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, buffer_acc1_out));
     OCL_CHECK(err, err = krnl_vector_add.setArg(narg++, buffer_cycle));
 
     std::cout << "Finish setArgs\n";
@@ -182,8 +185,8 @@ int main(int argc, char* argv[]) {
     ap_int<8>* X_acc1;
     ap_int<8>* W_acc0;
     ap_int<8>* W_acc1;
-    ap_uint<64>* acc0_out;
-    ap_uint<64>* acc1_out;
+    ap_uint<128>* acc0_out;
+    // ap_uint<64>* acc1_out;
     int* cycle;
     OCL_CHECK(err,
               X_acc0 = (ap_int<8>*)q.enqueueMapBuffer(buffer_X_acc0, CL_TRUE, CL_MAP_WRITE, 0, L*D, NULL, NULL, &err));
@@ -193,10 +196,10 @@ int main(int argc, char* argv[]) {
               W_acc0 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc0, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8, NULL, NULL, &err));
     OCL_CHECK(err,
               W_acc1 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc1, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8, NULL, NULL, &err));
-    OCL_CHECK(err, acc0_out = (ap_uint<64>*)q.enqueueMapBuffer(buffer_acc0_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D, NULL,
+    OCL_CHECK(err, acc0_out = (ap_uint<128>*)q.enqueueMapBuffer(buffer_acc0_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D * 2, NULL,
                                                          NULL, &err));
-    OCL_CHECK(err, acc1_out = (ap_uint<64>*)q.enqueueMapBuffer(buffer_acc1_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D, NULL,
-                                                         NULL, &err));
+    // OCL_CHECK(err, acc1_out = (ap_uint<64>*)q.enqueueMapBuffer(buffer_acc1_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D, NULL,
+    //                                                      NULL, &err));
     OCL_CHECK(err, cycle = (int*)q.enqueueMapBuffer(buffer_cycle, CL_TRUE, CL_MAP_READ, 0, sizeof(int), NULL,
                                                          NULL, &err));
 
@@ -230,7 +233,7 @@ int main(int argc, char* argv[]) {
     // The result of the previous kernel execution will need to be retrieved in
     // order to view the results. This call will transfer the data from FPGA to
     // source_results vector
-    OCL_CHECK(err, q.enqueueMigrateMemObjects({buffer_acc0_out, buffer_acc1_out, buffer_cycle}, CL_MIGRATE_MEM_OBJECT_HOST));
+    OCL_CHECK(err, q.enqueueMigrateMemObjects({buffer_acc0_out, buffer_cycle}, CL_MIGRATE_MEM_OBJECT_HOST));
 
     std::cout << "Receive data\n";
 
@@ -257,7 +260,7 @@ int main(int argc, char* argv[]) {
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(buffer_W_acc0, W_acc0));
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(buffer_W_acc1, W_acc1));
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(buffer_acc0_out, acc0_out));
-    OCL_CHECK(err, err = q.enqueueUnmapMemObject(buffer_acc1_out, acc1_out));
+    // OCL_CHECK(err, err = q.enqueueUnmapMemObject(buffer_acc1_out, acc1_out));
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(buffer_cycle, cycle));
     OCL_CHECK(err, err = q.finish());
 
