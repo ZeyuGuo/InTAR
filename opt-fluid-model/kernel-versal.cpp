@@ -1384,14 +1384,17 @@ void sfu_buffer_slr0( // double buffering
 
         for(int l = 0; l < (L >> 5); l++){
             float sum[8][16];
+            float var[8][16];
             float cache[MAX_SEQ_LEN][16];
             #pragma HLS array_partition variable=cache dim=2 complete
             #pragma HLS array_partition variable=sum dim=2 complete
+            #pragma HLS array_partition variable=var dim=2 complete
             
             for(int i = 0; i < 8; i++){
                 for(int j = 0; j < 16; j++){
                     #pragma HLS unroll
                     sum[i][j] = 0.0;
+                    var[i][j] = 0.0;
                 }
             }
 
@@ -1411,6 +1414,7 @@ void sfu_buffer_slr0( // double buffering
                     #pragma HLS unroll
                     float res = tapa::bit_cast<float>(ap_int<32>(tmp(k*32+31, k*32)));
                     sum[i%8][k] += res;
+                    if(stage == 4) var[i%8][k] += (res * res);
                     cache[i][k] = res;
                 }
             }
@@ -1420,18 +1424,23 @@ void sfu_buffer_slr0( // double buffering
                 for(int j = 0; j < 8; j++){
                     #pragma HLS pipeline II=1 style=stp
                     #pragma HLS dependence true variable=sum distance=8
+                    #pragma HLS dependence true variable=var distance=8
                     for(int k = 0; k < 2; k++){
                         sum[0][j*2+k] += sum[i][j*2+k];
+                        if(stage == 4) var[0][j*2+k] += var[i][j*2+k];
                     }
                 }
             }
 
             ap_uint<512> tmp;
+            ap_uint<512> tmp_var;
             for(int i = 0; i < 16; i++){
                 #pragma HLS unroll
                 tmp(i*32+31, i*32) = tapa::bit_cast<ap_uint<32>>(sum[0][i]);
+                if(stage == 4) tmp_var(i*32+31, i*32) = tapa::bit_cast<ap_uint<32>>(var[0][i]);
             }
             fifo_data_out.write(tmp);
+            if(stage == 4) fifo_data_out.write(tmp_var);
 
         write:
             for(int i = 0; i < hidden_bound; i++){
@@ -1473,6 +1482,41 @@ void sfu_acc_exp(
                     fifo_buf[l%2].write(tmp_o);
                     i++;
                 }
+            }
+        }
+    }
+}
+
+void sfu_gelu(
+    const int L,
+    tapa::istream<ap_uint<512>>& fifo_ffn,
+    tapa::ostream<ap_uint<128>>& fifo_out
+){
+    for(int i = 0; i < (L >> 4); i++){
+        for(int j = 0; j < D_ffn;){
+            if(!fifo_ffn.empty()){
+                ap_uint<512> tmp; fifo_ffn.try_read(tmp);
+                ap_uint<128> tmp_out;
+                for(int k = 0; k < 16; k++){
+                    // piecewise linear approximation: https://github.com/cornell-zhang/allo-pldi24-artifact/blob/main/llm/gpt_region_3.cpp#L335
+                    float val = (float) tapa::bit_cast<int>(ap_int<32>(tmp(k*32+31, k*32)));
+                    float outp_data = 0.0;
+                    if (val < -3)
+                        outp_data = 0;
+                    else if(val < -1)
+                        outp_data = -0.0773 * (val + 3) - 0.004;
+                    else if(val < 0)
+                        outp_data = 0.1587 * val;
+                    else if(val < 1)
+                        outp_data = 0.8413 * val;
+                    else if(val < 3)
+                        outp_data = 1.0773 * (val - 1) + 0.8413;
+                    else
+                        outp_data = val;
+                    tmp_out(k*8+7, k*8) = ap_int<8>((int) (outp_data) >> 8);
+                }
+                fifo_out.write(tmp_out);
+                j++;
             }
         }
     }
@@ -1526,15 +1570,29 @@ void sfu_norm_slr0(
 
         for(int l = 0; l < (L >> 4); l++){
             float sum[16];
+            float mean[16];
+            float var[16];
             #pragma HLS array_partition variable=sum complete
+            #pragma HLS array_partition variable=mean complete
+            #pragma HLS array_partition variable=var complete
 
             const int fifo_idx = l%2;
 
             ap_uint<512> tmp_in = fifo_buf[fifo_idx].read();
+            ap_uint<512> tmp_var;
+            if(stage == 4) tmp_var = fifo_buf[fifo_idx].read();
 
-            for(int i = 0; i < 16; i++){
-                #pragma HLS unroll
-                sum[i] = 32.0 / tapa::bit_cast<float>(ap_uint<32>(tmp_in(i*32+31, i*32)));
+            if(stage == 4){
+                for(int i = 0; i < 16; i++){
+                    #pragma HLS unroll
+                    mean[i] = tapa::bit_cast<float>(ap_uint<32>(tmp_in(i*32+31, i*32))) / D;
+                    var[i] = 1024 / (tapa::bit_cast<float>(ap_uint<32>(tmp_var(i*32+31, i*32))) / D - mean[i]*mean[i] + (float) 0.00001);
+                }
+            } else {
+                for(int i = 0; i < 16; i++){
+                    #pragma HLS unroll
+                    sum[i] = 32.0 / tapa::bit_cast<float>(ap_uint<32>(tmp_in(i*32+31, i*32)));
+                }
             }
 
             for(int i = 0; i < hidden_bound;){
@@ -1544,7 +1602,16 @@ void sfu_norm_slr0(
                     ap_uint<128> tmp;
                     for(int j = 0; j < 16; j++){
                         #pragma HLS unroll
-                        ap_int<8> res = (int) (tapa::bit_cast<float>(ap_uint<32>(tmp_cache(j*32+31, j*32))) * sum[j]);
+                        ap_int<8> res;
+                        float op1; float op2;
+                        if(stage == 4){
+                            op1 = tapa::bit_cast<float>(ap_uint<32>(tmp_cache(j*32+31, j*32))) - mean[j];
+                            op2 = std::sqrt(var[j]);
+                        } else {
+                            op1 = tapa::bit_cast<float>(ap_uint<32>(tmp_cache(j*32+31, j*32)));
+                            op2 = sum[j];
+                        }
+                        res = (int) (op1 * op2);
                         tmp(j*8 + 7, j*8) = res;
                     }
                     if(stage == 4) {
