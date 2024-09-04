@@ -80,6 +80,7 @@ int main(int argc, char* argv[]) {
     const int NUM_DUM_SLR = 4;
     const int NUM_SLR = 4;
     const int D_head = 64;
+    const int D_ffn = 4096;
 
     // Creates a vector of DATA_SIZE elements with an initial value of 10 and 32
     // using customized allocator for getting buffer alignment to 4k boundary
@@ -157,9 +158,9 @@ int main(int argc, char* argv[]) {
     // be used to reference the memory locations on the device.
     OCL_CHECK(err, cl::Buffer buffer_X_acc0(context, CL_MEM_READ_ONLY, (size_t)(L*D), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_X_acc1(context, CL_MEM_READ_ONLY, (size_t)(L*D), NULL, &err));
-    OCL_CHECK(err, cl::Buffer buffer_W_acc0(context, CL_MEM_READ_ONLY, (size_t)(D * D_head * NUM_DUM_SLR * 8), NULL, &err));
+    OCL_CHECK(err, cl::Buffer buffer_W_acc0(context, CL_MEM_READ_ONLY, (size_t)(D * D_head * NUM_DUM_SLR * 8 + D * D_ffn), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_W_acc1(context, CL_MEM_READ_ONLY, (size_t)(D * D_head * NUM_DUM_SLR * 8), NULL, &err));
-    OCL_CHECK(err, cl::Buffer buffer_acc0_out(context, CL_MEM_WRITE_ONLY, (size_t)(NUM_SLR * L * D * 2), NULL, &err));
+    OCL_CHECK(err, cl::Buffer buffer_acc0_out(context, CL_MEM_WRITE_ONLY, (size_t)(NUM_SLR * L * D * 8), NULL, &err));
     // OCL_CHECK(err, cl::Buffer buffer_acc1_out(context, CL_MEM_WRITE_ONLY, (size_t)(NUM_SLR * L * D), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_cycle(context, CL_MEM_WRITE_ONLY, sizeof(int), NULL, &err));
 
@@ -185,7 +186,7 @@ int main(int argc, char* argv[]) {
     ap_int<8>* X_acc1;
     ap_int<8>* W_acc0;
     ap_int<8>* W_acc1;
-    ap_uint<128>* acc0_out;
+    ap_uint<512>* acc0_out;
     // ap_uint<64>* acc1_out;
     int* cycle;
     OCL_CHECK(err,
@@ -193,10 +194,10 @@ int main(int argc, char* argv[]) {
     OCL_CHECK(err,
               X_acc1 = (ap_int<8>*)q.enqueueMapBuffer(buffer_X_acc1, CL_TRUE, CL_MAP_WRITE, 0, L*D, NULL, NULL, &err));
     OCL_CHECK(err,
-              W_acc0 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc0, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8, NULL, NULL, &err));
+              W_acc0 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc0, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8 + D * D_ffn, NULL, NULL, &err));
     OCL_CHECK(err,
               W_acc1 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc1, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8, NULL, NULL, &err));
-    OCL_CHECK(err, acc0_out = (ap_uint<128>*)q.enqueueMapBuffer(buffer_acc0_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D * 2, NULL,
+    OCL_CHECK(err, acc0_out = (ap_uint<512>*)q.enqueueMapBuffer(buffer_acc0_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D * 8, NULL,
                                                          NULL, &err));
     // OCL_CHECK(err, acc1_out = (ap_uint<64>*)q.enqueueMapBuffer(buffer_acc1_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D, NULL,
     //                                                      NULL, &err));
@@ -210,8 +211,11 @@ int main(int argc, char* argv[]) {
     }
 
     for(int i = 0; i < D * D_head * NUM_DUM_SLR * 8; i++){
-        W_acc0[i] = 1;
         W_acc1[i] = 1;
+    }
+
+    for(int i = 0; i < D * D_head * NUM_DUM_SLR * 8 + D * D_ffn; i++){
+        W_acc0[i] = 1;
     }
 
     std::cout << "Finish assigning values\n";
