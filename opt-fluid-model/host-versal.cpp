@@ -55,7 +55,7 @@ int main(int argc, char *argv[]){
     aligned_vector<ap_int<8>> X_acc0(L * D);
     aligned_vector<ap_int<8>> X_acc1(L * D);
     aligned_vector<ap_int<8>> W_acc0(D * D_head * NUM_DUM_SLR * 8 + D * D_ffn, 1);
-    aligned_vector<ap_int<8>> W_acc1(D * D_head * NUM_DUM_SLR * 8);
+    aligned_vector<ap_int<8>> W_acc1(D * D_head * NUM_DUM_SLR * 8 + D * D_ffn, 1);
     aligned_vector<ap_uint<512>> acc0_out(NUM_SLR * L * D / 8);
     // aligned_vector<ap_uint<512>> acc0_out(NUM_SLR, aligned_vector<ap_uint<512>>(L * L / 16));
     aligned_vector<ap_uint<64>> acc1_out(NUM_SLR * L * D / 8);

@@ -159,7 +159,7 @@ int main(int argc, char* argv[]) {
     OCL_CHECK(err, cl::Buffer buffer_X_acc0(context, CL_MEM_READ_ONLY, (size_t)(L*D), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_X_acc1(context, CL_MEM_READ_ONLY, (size_t)(L*D), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_W_acc0(context, CL_MEM_READ_ONLY, (size_t)(D * D_head * NUM_DUM_SLR * 8 + D * D_ffn), NULL, &err));
-    OCL_CHECK(err, cl::Buffer buffer_W_acc1(context, CL_MEM_READ_ONLY, (size_t)(D * D_head * NUM_DUM_SLR * 8), NULL, &err));
+    OCL_CHECK(err, cl::Buffer buffer_W_acc1(context, CL_MEM_READ_ONLY, (size_t)(D * D_head * NUM_DUM_SLR * 8 + D * D_ffn), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_acc0_out(context, CL_MEM_WRITE_ONLY, (size_t)(NUM_SLR * L * D * 8), NULL, &err));
     // OCL_CHECK(err, cl::Buffer buffer_acc1_out(context, CL_MEM_WRITE_ONLY, (size_t)(NUM_SLR * L * D), NULL, &err));
     OCL_CHECK(err, cl::Buffer buffer_cycle(context, CL_MEM_WRITE_ONLY, sizeof(int), NULL, &err));
@@ -196,7 +196,7 @@ int main(int argc, char* argv[]) {
     OCL_CHECK(err,
               W_acc0 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc0, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8 + D * D_ffn, NULL, NULL, &err));
     OCL_CHECK(err,
-              W_acc1 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc1, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8, NULL, NULL, &err));
+              W_acc1 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc1, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8 + D * D_ffn, NULL, NULL, &err));
     OCL_CHECK(err, acc0_out = (ap_uint<512>*)q.enqueueMapBuffer(buffer_acc0_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D * 8, NULL,
                                                          NULL, &err));
     // OCL_CHECK(err, acc1_out = (ap_uint<64>*)q.enqueueMapBuffer(buffer_acc1_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D, NULL,
@@ -210,7 +210,7 @@ int main(int argc, char* argv[]) {
         X_acc1[i] = 1;
     }
 
-    for(int i = 0; i < D * D_head * NUM_DUM_SLR * 8; i++){
+    for(int i = 0; i < D * D_head * NUM_DUM_SLR * 8 + D * D_ffn; i++){
         W_acc1[i] = 1;
     }
 
