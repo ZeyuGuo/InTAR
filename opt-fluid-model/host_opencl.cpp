@@ -186,7 +186,7 @@ int main(int argc, char* argv[]) {
     ap_int<8>* X_acc1;
     ap_int<8>* W_acc0;
     ap_int<8>* W_acc1;
-    ap_uint<512>* acc0_out;
+    ap_uint<128>* acc0_out;
     // ap_uint<64>* acc1_out;
     int* cycle;
     OCL_CHECK(err,
@@ -197,7 +197,7 @@ int main(int argc, char* argv[]) {
               W_acc0 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc0, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8 + D * D_ffn, NULL, NULL, &err));
     OCL_CHECK(err,
               W_acc1 = (ap_int<8>*)q.enqueueMapBuffer(buffer_W_acc1, CL_TRUE, CL_MAP_WRITE, 0, D * D_head * NUM_DUM_SLR * 8 + D * D_ffn, NULL, NULL, &err));
-    OCL_CHECK(err, acc0_out = (ap_uint<512>*)q.enqueueMapBuffer(buffer_acc0_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D * 8, NULL,
+    OCL_CHECK(err, acc0_out = (ap_uint<128>*)q.enqueueMapBuffer(buffer_acc0_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D * 2, NULL,
                                                          NULL, &err));
     // OCL_CHECK(err, acc1_out = (ap_uint<64>*)q.enqueueMapBuffer(buffer_acc1_out, CL_TRUE, CL_MAP_READ, 0, NUM_SLR * L * D, NULL,
     //                                                      NULL, &err));

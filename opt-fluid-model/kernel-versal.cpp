@@ -145,8 +145,8 @@ void read_inst(
 
 void write_mtx(
     const int N,
-    tapa::async_mmap<ap_uint<512>>& output_mtx,
-    tapa::istream<ap_uint<512>>& fifo_in,
+    tapa::async_mmap<ap_uint<128>>& output_mtx,
+    tapa::istream<ap_uint<128>>& fifo_in,
     tapa::ostream<bool>& fifo_fin
 ){
 
@@ -154,7 +154,7 @@ void write_mtx(
         #pragma HLS pipeline II=1 style=stp
         if((i_req < N) & !fifo_in.empty() & !output_mtx.write_addr.full() & !output_mtx.write_data.full()){
             output_mtx.write_addr.try_write(i_req);
-            ap_uint<512> tmp; fifo_in.try_read(tmp);
+            ap_uint<128> tmp; fifo_in.try_read(tmp);
             output_mtx.write_data.try_write(tmp);
             ++i_req;
         }
@@ -1398,9 +1398,10 @@ void sfu_buffer_slr0( // double buffering
     const int L,
     tapa::istream<ap_uint<512>>& fifo_data_in_exp,
     tapa::istream<ap_uint<512>>& fifo_data_in_ln, 
+    tapa::istream<ap_uint<512>>& fifo_data_in_ffn,
     tapa::ostream<ap_uint<512>>& fifo_data_out
 ){
-    for(int stage = 0; stage < 5; stage++){
+    for(int stage = 0; stage < 6; stage++){
 
         const int hidden_bound = (stage < 4) ? L : D;
 
@@ -1428,15 +1429,17 @@ void sfu_buffer_slr0( // double buffering
                 ap_uint<512> tmp;
                 if(stage < 4) {
                     tmp = fifo_data_in_exp.read();
-                } else {
+                } else if(stage == 4){
                     tmp = fifo_data_in_ln.read();
+                } else {
+                    tmp = fifo_data_in_ffn.read();
                 }
                 
                 for(int k = 0; k < 16; k++){
                     #pragma HLS unroll
                     float res = tapa::bit_cast<float>(ap_int<32>(tmp(k*32+31, k*32)));
                     sum[i%8][k] += res;
-                    if(stage == 4) var[i%8][k] += (res * res);
+                    if(stage >= 4) var[i%8][k] += (res * res);
                     cache[i][k] = res;
                 }
             }
@@ -1449,7 +1452,7 @@ void sfu_buffer_slr0( // double buffering
                     #pragma HLS dependence true variable=var distance=8
                     for(int k = 0; k < 2; k++){
                         sum[0][j*2+k] += sum[i][j*2+k];
-                        if(stage == 4) var[0][j*2+k] += var[i][j*2+k];
+                        if(stage >= 4) var[0][j*2+k] += var[i][j*2+k];
                     }
                 }
             }
@@ -1459,10 +1462,10 @@ void sfu_buffer_slr0( // double buffering
             for(int i = 0; i < 16; i++){
                 #pragma HLS unroll
                 tmp(i*32+31, i*32) = tapa::bit_cast<ap_uint<32>>(sum[0][i]);
-                if(stage == 4) tmp_var(i*32+31, i*32) = tapa::bit_cast<ap_uint<32>>(var[0][i]);
+                if(stage >= 4) tmp_var(i*32+31, i*32) = tapa::bit_cast<ap_uint<32>>(var[0][i]);
             }
             fifo_data_out.write(tmp);
-            if(stage == 4) fifo_data_out.write(tmp_var);
+            if(stage >= 4) fifo_data_out.write(tmp_var);
 
         write:
             for(int i = 0; i < hidden_bound; i++){
@@ -1474,11 +1477,10 @@ void sfu_buffer_slr0( // double buffering
                 }
                 fifo_data_out.write(tmp);
             }
-
         }
     }
-
 }
+
 
 void sfu_acc_exp(
     const int L,
@@ -1625,9 +1627,10 @@ void sfu_norm_slr0(
     const int L,
     tapa::istreams<ap_uint<512>, 2>& fifo_buf,
     tapa::ostream<ap_uint<128>>& fifo_data_out,
-    tapa::ostream<ap_uint<128>>& fifo_data_off
+    tapa::ostream<ap_uint<128>>& fifo_data_off,
+    tapa::ostream<ap_uint<128>>& fifo_out
 ){
-    for(int stage = 0; stage < 5; stage++){
+    for(int stage = 0; stage < 6; stage++){
         const int hidden_bound = (stage < 4) ? L : D;
 
         for(int l = 0; l < (L >> 4); l++){
@@ -1642,9 +1645,9 @@ void sfu_norm_slr0(
 
             ap_uint<512> tmp_in = fifo_buf[fifo_idx].read();
             ap_uint<512> tmp_var;
-            if(stage == 4) tmp_var = fifo_buf[fifo_idx].read();
+            if(stage >= 4) tmp_var = fifo_buf[fifo_idx].read();
 
-            if(stage == 4){
+            if(stage >= 4){
                 for(int i = 0; i < 16; i++){
                     #pragma HLS unroll
                     mean[i] = tapa::bit_cast<float>(ap_uint<32>(tmp_in(i*32+31, i*32))) / D;
@@ -1666,7 +1669,7 @@ void sfu_norm_slr0(
                         #pragma HLS unroll
                         ap_int<8> res;
                         float op1; float op2;
-                        if(stage == 4){
+                        if(stage >= 4){
                             op1 = tapa::bit_cast<float>(ap_uint<32>(tmp_cache(j*32+31, j*32))) - mean[j];
                             op2 = std::sqrt(var[j]);
                         } else {
@@ -1678,6 +1681,8 @@ void sfu_norm_slr0(
                     }
                     if(stage == 4) {
                         fifo_data_off.write(tmp);
+                    } else if(stage == 5){
+                        fifo_out.write(tmp);
                     } else {
                         fifo_data_out.write(tmp);
                     }
@@ -1735,7 +1740,8 @@ void context_buffer(
 void ffn_buffer(
     const int L,
     tapa::istream<ap_uint<128>>& fifo_ffn_in,
-    tapa::ostream<ap_uint<1024>>& fifo_ffn_out
+    tapa::ostream<ap_uint<1024>>& fifo_ffn_out,
+    tapa::ostream<ap_uint<1024>>& fifo_ffn_res
 ){
     ap_uint<64> X[MAX_SEQ_LEN][D_div_8]; // 8 bit
     #pragma HLS array_partition variable=X cyclic dim=1 factor=16
@@ -1775,6 +1781,43 @@ void ffn_buffer(
                 }
                 fifo_ffn_out.write(tmp);
             }
+            for(int j = 0; j < 2; j++){
+                ap_uint<1024> send;
+                for(int k = 0; k < 16; k++){
+                    #pragma HLS unroll
+                    send(k*64+63, k*64) = X[i*16+k][iter*2+j];
+                }
+                fifo_ffn_res.write(send);
+            }
+
+        }
+    }
+}
+
+void ffn_residual(
+    const int L,
+    tapa::istream<ap_uint<1024>>& fifo_x,
+    tapa::istream<ap_uint<512>>& fifo_in,
+    tapa::ostreams<ap_uint<512>, 2>& fifo_out
+){
+    for(int i = 0; i < (L >> 4); i++){
+        for(int j = 0; j < D_div_8; j++){
+            ap_uint<1024> tmp_x = fifo_x.read();
+            for(int k = 0; k < 8;){
+                if(!fifo_in.empty()){
+                    ap_uint<512> tmp; fifo_in.try_read(tmp);
+                    ap_uint<512> tmp_o;
+                    for(int l = 0; l < 16; l++){
+                        #pragma HLS unroll
+                        ap_int<32> a = tmp(l*32+31, l*32);
+                        ap_int<8> b = tmp_x(l*64+k*8+7, l*64+k*8);
+                        ap_int<32> res = a + b;
+                        tmp_o(l*32+31, l*32) = res;
+                    }
+                    fifo_out[i%2].write(tmp_o);
+                    k++;
+                }
+            }
         }
     }
 }
@@ -1798,7 +1841,7 @@ void opt_kernel(
     tapa::mmap<ap_uint<512>> X_acc1,
     tapa::mmap<ap_uint<512>> W_acc0,
     tapa::mmap<ap_uint<512>> W_acc1,
-    tapa::mmap<ap_uint<512>> acc0_out,
+    tapa::mmap<ap_uint<128>> acc0_out,
     // tapa::mmap<ap_uint<64>> acc1_out,
     tapa::mmap<int> cycle_count
 ){
@@ -1826,7 +1869,7 @@ void opt_kernel(
     tapa::streams<ap_uint<512>, NUM_SLR> fifo_reduce_acc1("fifo_reduce_acc1");
 
     // tapa::stream<ap_uint<128>> fifo_acc0_out("fifo_acc0_out");
-    tapa::stream<ap_uint<512>> fifo_acc1_out("fifo_acc1_out");
+    tapa::stream<ap_uint<128>> fifo_acc1_out("fifo_acc1_out");
 
     tapa::stream<ap_uint<512>> fifo_res_acc0("fifo_res_acc0");
     tapa::stream<ap_uint<512>> fifo_res_acc1("fifo_res_acc1");
@@ -1839,6 +1882,10 @@ void opt_kernel(
     tapa::streams<ap_uint<512>, NUM_SLR> fifo_gelu_in("fifo_gelu_in");
     tapa::streams<ap_uint<128>, NUM_SLR, D> fifo_gelu_out("fifo_gelu_out");
     tapa::streams<ap_uint<1024>, NUM_SLR> fifo_gelu_full("fifo_gelu_full");
+
+    tapa::stream<ap_uint<512>> fifo_ffn2("fifo_ffn2");
+    tapa::stream<ap_uint<1024>, D_div_8+2> fifo_skip_x("fifo_skip_x");
+    tapa::streams<ap_uint<512>, 2> fifo_res2("fifo_res2");
 
     tapa::task()
         .invoke<tapa::join>(read_inst, seq_len, fifo_inst_acc0, fifo_inst_acc1)
@@ -1874,7 +1921,7 @@ void opt_kernel(
             fifo_reduce_acc1,
             fifo_res_acc1,
             fifo_gelu_full,
-            fifo_acc1_out
+            fifo_ffn2
             // fifo_fin
         )
         .invoke<tapa::join>(
@@ -1923,12 +1970,14 @@ void opt_kernel(
             sfu_buffer_slr0, seq_len,
             fifo_sfu_buf_in,
             fifo_ln_acc0,
+            fifo_res2,
             fifo_sfu_buf_out
         )
         .invoke<tapa::join>(
             sfu_buffer_slr0, seq_len,
             fifo_sfu_buf_in,
             fifo_ln_acc1,
+            fifo_res2,
             fifo_sfu_buf_out
         )
         .invoke<tapa::join, (NUM_SLR-1)*2>(
@@ -1940,7 +1989,8 @@ void opt_kernel(
             sfu_norm_slr0, seq_len,
             fifo_sfu_buf_out,
             fifo_from_sfu_to_acc1,
-            fifo_ffn_buffer_in
+            fifo_ffn_buffer_in,
+            fifo_acc1_out
         )
         .invoke<tapa::join, NUM_SLR-1>(
             sfu_norm, seq_len,
@@ -1950,7 +2000,14 @@ void opt_kernel(
         .invoke<tapa::join>(
             ffn_buffer, seq_len,
             fifo_ffn_buffer_in,
-            fifo_ffn_buffer_out
+            fifo_ffn_buffer_out,
+            fifo_skip_x
+        )
+        .invoke<tapa::join>(
+            ffn_residual, seq_len,
+            fifo_skip_x,
+            fifo_ffn2,
+            fifo_res2
         )
         .invoke<tapa::join, NUM_SLR>(
             context_buffer, seq_len,
