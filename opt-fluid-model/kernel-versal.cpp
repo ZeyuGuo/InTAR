@@ -70,14 +70,12 @@ void black_hole_ap_uint_1024(tapa::istream<ap_uint<1024>> & fifo_in) {
 }
 
 void read_W(
-    const int N,
     tapa::async_mmap<ap_uint<512>>& vec,
     tapa::ostream<ap_uint<512>>& fifo_out
 ){
-
-    for(int i_req = 0, i_resp = 0; i_resp < (N >> 7);){
+    for(int i_req = 0, i_resp = 0; i_resp < (TOTAL_WEIGHT_SIZE >> 7);){
         #pragma HLS pipeline II=1 style=stp style=stp
-        if((i_req < (N >> 7)) & !vec.read_addr.full()){
+        if((i_req < (TOTAL_WEIGHT_SIZE >> 7)) & !vec.read_addr.full()){
             vec.read_addr.write(i_req);
             i_req++;
         }
@@ -115,6 +113,10 @@ void read_inst(
     tapa::ostream<int>& fifo_out_acc0,
     tapa::ostream<int>& fifo_out_acc1
 ){
+
+    fifo_out_acc0.write(L);
+    fifo_out_acc1.write(L);
+
     for(int stage_i = 0; stage_i < 14; stage_i++){
         #pragma HLS pipeline II=1 style=stp
 
@@ -141,6 +143,16 @@ void read_inst(
             fifo_out_acc1.write(L);
         } 
     }
+}
+
+void packet_switch_acc(
+    tapa::istream<int>& fifo_inst_in,
+    tapa::ostream<int>& fifo_sfu_out,
+    tapa::ostream<int>& fifo_sfu_gelu
+) {
+    const int L = fifo_inst_in.read();
+    fifo_sfu_out.write(L);  
+    fifo_sfu_gelu.write(L);
 }
 
 void write_mtx(
@@ -183,9 +195,9 @@ void write_zero(
 
 // acc slr0 master node
 void temporal_acc0_slr0(
-    const int L,
     tapa::istream<int>& fifo_len_in,
     tapa::ostream<int>& fifo_len_out,
+    tapa::ostream<int>& fifo_len_sfu,
     tapa::istream<ap_uint<512>>& fifo_X_in,
     tapa::ostream<ap_uint<1024>>& fifo_X_out, // 8-bit activation
     tapa::istream<ap_uint<512>>& fifo_W_in,
@@ -215,6 +227,10 @@ void temporal_acc0_slr0(
     #pragma HLS array_partition variable=X cyclic dim=2 factor=2
     #pragma HLS bind_storage variable=X type=ram_2p impl=uram 
 
+    const int L = fifo_len_in.read();
+    fifo_len_out.write(L);
+    fifo_len_sfu.write(L);
+
     for(int stage_i = 0; stage_i < 14; stage_i++){
 
         //TODO: stage send from inst
@@ -226,12 +242,12 @@ void temporal_acc0_slr0(
         ap_uint<32> W[D][D_div_8]; // TODO: reduce dimension
         #pragma HLS array_partition variable=W cyclic dim=1 factor=16
 
+        const int stage = (stage_i < 12) ? (stage_i % 3) : (stage_i - 9);
+
         const int start = fifo_len_in.read();
         const int end = fifo_len_in.read();
         fifo_len_out.write(start);
         fifo_len_out.write(end);
-
-        const int stage = (stage_i < 12) ? (stage_i % 3) : (stage_i - 9);
 
         // load weights and forward
         if(stage != 2) { // TODO: 1d array & uniform access
@@ -472,9 +488,9 @@ void temporal_acc0_slr0(
 }
 
 void temporal_acc0(
-    const int L,
     tapa::istream<int>& fifo_len_in,
     tapa::ostream<int>& fifo_len_out,
+    tapa::ostream<int>& fifo_len_sfu,
     tapa::istream<ap_uint<1024>>& fifo_X_in,
     tapa::ostream<ap_uint<1024>>& fifo_X_out, // 8-bit activation
     tapa::istream<ap_uint<512>>& fifo_W_in,
@@ -496,6 +512,10 @@ void temporal_acc0(
     #pragma HLS array_partition variable=scratchpad_k cyclic dim=2 factor=2
     #pragma HLS bind_storage variable=scratchpad_k type=ram_2p impl=uram
 
+    const int L = fifo_len_in.read();
+    fifo_len_out.write(L);
+    fifo_len_sfu.write(L);
+
     for(int stage_i = 0; stage_i < 14; stage_i++){
     #pragma HLS loop_flatten off
 
@@ -507,12 +527,12 @@ void temporal_acc0(
         ap_uint<32> W[D][D_div_8]; // 4 bit
         #pragma HLS array_partition variable=W cyclic dim=1 factor=16
 
+        const int stage = (stage_i < 12) ? (stage_i % 3) : stage_i - 9;
+
         const int start = fifo_len_in.read();
         const int end = fifo_len_in.read();
         fifo_len_out.write(start);
         fifo_len_out.write(end);
-
-        const int stage = (stage_i < 12) ? (stage_i % 3) : stage_i - 9;
 
         // load weights and forward
         if(stage != 2) {
@@ -715,9 +735,9 @@ void temporal_acc0(
 
 // acc slr0 master node
 void temporal_acc1_slr0(
-    const int L,
     tapa::istream<int>& fifo_len_in,
     tapa::ostream<int>& fifo_len_out,
+    tapa::ostream<int>& fifo_len_context,
     tapa::istream<ap_uint<512>>& fifo_X_in,
     tapa::ostream<ap_uint<1024>>& fifo_X_out, // 8-bit activation
     tapa::istream<ap_uint<512>>& fifo_W_in,
@@ -746,6 +766,10 @@ void temporal_acc1_slr0(
     // ap_uint<64> scratchpad_out[MAX_SEQ_LEN][D_head_div_8];
     // #pragma HLS array_partition variable=scratchpad_out cyclic dim=1 factor=16
     // #pragma HLS array_partition variable=scratchpad_out cyclic dim=2 factor=2
+
+    const int L = fifo_len_in.read();
+    fifo_len_out.write(L);
+    fifo_len_context.write(L);
 
     for(int stage_i = 0; stage_i < 14; stage_i++){
 
@@ -1021,12 +1045,12 @@ void residual(
     tapa::istream<ap_uint<512>>& fifo_res_in,
     tapa::ostream<ap_uint<512>>& fifo_res_out
 ){
-    ap_uint<32> res_buffer[16][16];
-    #pragma HLS array_partition variable=res_buffer complete dim=1
-    #pragma HLS array_partition variable=res_buffer complete dim=2
-
     for(int i = 0; i < (L >> 5); i++){
         for(int j = 0; j < D_div_16; j++){
+            ap_uint<32> res_buffer[16][16];
+            #pragma HLS array_partition variable=res_buffer complete dim=1
+            #pragma HLS array_partition variable=res_buffer complete dim=2
+
             read:
             for(int k = 0; k < 16;){
                 #pragma HLS pipeline II=1 style=stp
@@ -1056,9 +1080,9 @@ void residual(
 
 
 void temporal_acc1(
-    const int L,
     tapa::istream<int>& fifo_len_in,
     tapa::ostream<int>& fifo_len_out,
+    tapa::ostream<int>& fifo_len_context,
     tapa::istream<ap_uint<1024>>& fifo_X_in,
     tapa::ostream<ap_uint<1024>>& fifo_X_out, // 8-bit activation
     tapa::istream<ap_uint<512>>& fifo_W_in,
@@ -1080,6 +1104,10 @@ void temporal_acc1(
     // ap_uint<64> scratchpad_out[MAX_SEQ_LEN][D_head_div_8];
     // #pragma HLS array_partition variable=scratchpad_out cyclic dim=1 factor=16
     // #pragma HLS array_partition variable=scratchpad_out cyclic dim=2 factor=2
+
+    const int L = fifo_len_in.read();
+    fifo_len_out.write(L);
+    fifo_len_context.write(L);
 
     for(int stage_i = 0; stage_i < 14; stage_i++){
 
@@ -1327,10 +1355,11 @@ void temporal_acc1(
 }
 
 void sfu_buffer( // double buffering
-    const int L,
+    tapa::istream<int>& fifo_inst,
     tapa::istream<ap_uint<512>>& fifo_data_in,
     tapa::ostream<ap_uint<512>>& fifo_data_out
 ){
+    const int L = fifo_inst.read();
     for(int stage = 0; stage < 4; stage++){
 
         for(int l = 0; l < (L >> 5); l++){
@@ -1395,12 +1424,13 @@ void sfu_buffer( // double buffering
 }
 
 void sfu_buffer_slr0( // double buffering
-    const int L,
+    tapa::istream<int>& fifo_inst,
     tapa::istream<ap_uint<512>>& fifo_data_in_exp,
     tapa::istream<ap_uint<512>>& fifo_data_in_ln, 
     tapa::istream<ap_uint<512>>& fifo_data_in_ffn,
     tapa::ostream<ap_uint<512>>& fifo_data_out
 ){
+    const int L = fifo_inst.read();
     for(int stage = 0; stage < 6; stage++){
 
         const int hidden_bound = (stage < 4) ? L : D;
@@ -1483,10 +1513,15 @@ void sfu_buffer_slr0( // double buffering
 
 
 void sfu_acc_exp(
-    const int L,
+    tapa::istream<int>& fifo_inst,
     tapa::istream<ap_uint<512>>& fifo_data_in,
-    tapa::ostreams<ap_uint<512>, 2>& fifo_buf
+    tapa::ostreams<ap_uint<512>, 2>& fifo_buf,
+    tapa::ostreams<int, 2>& fifo_inst_out
 ) {
+    const int L = fifo_inst.read();
+    fifo_inst_out[0].write(L);
+    fifo_inst_out[1].write(L);
+
     for(int stage = 0; stage < 4; stage++){
 
         for(int l = 0; l < (L >> 4); l++){
@@ -1512,10 +1547,14 @@ void sfu_acc_exp(
 }
 
 void sfu_gelu(
-    const int L,
+    tapa::istream<int>& fifo_inst,
+    tapa::ostream<int>& fifo_inst_out,
     tapa::istream<ap_uint<512>>& fifo_ffn,
     tapa::ostream<ap_uint<128>>& fifo_out
 ){
+    const int L = fifo_inst.read();
+    fifo_inst_out.write(L);
+
     for(int i = 0; i < (L >> 4); i++){
         for(int j = 0; j < D;){
             if(!fifo_ffn.empty()){
@@ -1547,10 +1586,12 @@ void sfu_gelu(
 }
 
 void data_packing(
-    const int L,
+    tapa::istream<int>& fifo_inst,
     tapa::istream<ap_uint<128>>& fifo_in,
     tapa::ostream<ap_uint<1024>>& fifo_out
 ){
+    const int L = fifo_inst.read();
+
     for(int i = 0; i < (L >> 4); i++){
         ap_uint<1024> cache[D_div_8];
         #pragma HLS bind_storage variable=cache type=ram_2p impl=uram
@@ -1588,10 +1629,11 @@ void data_packing(
 }
 
 void sfu_norm(
-    const int L,
+    tapa::istream<int>& fifo_inst,
     tapa::istreams<ap_uint<512>, 2>& fifo_buf,
     tapa::ostream<ap_uint<128>>& fifo_data_out
 ){
+    const int L = fifo_inst.read();
     for(int stage = 0; stage < 4; stage++){
 
         for(int l = 0; l < (L >> 4); l++){
@@ -1624,12 +1666,14 @@ void sfu_norm(
 }
 
 void sfu_norm_slr0(
-    const int L,
+    tapa::istream<int>& fifo_inst,
     tapa::istreams<ap_uint<512>, 2>& fifo_buf,
     tapa::ostream<ap_uint<128>>& fifo_data_out,
     tapa::ostream<ap_uint<128>>& fifo_data_off,
     tapa::ostream<ap_uint<128>>& fifo_out
 ){
+    const int L = fifo_inst.read();
+
     for(int stage = 0; stage < 6; stage++){
         const int hidden_bound = (stage < 4) ? L : D;
 
@@ -1694,7 +1738,7 @@ void sfu_norm_slr0(
 }
 
 void context_buffer(
-    const int L,
+    tapa::istream<int>& fifo_inst,
     tapa::istream<ap_uint<1024>>& fifo_context,
     tapa::ostream<ap_uint<1024>>& fifo_to_acc0,
     tapa::ostream<ap_uint<1024>>& fifo_to_acc1
@@ -1702,6 +1746,8 @@ void context_buffer(
     ap_uint<64> context[MAX_SEQ_LEN][D_head_div_2];
     #pragma HLS array_partition variable=context cyclic dim=1 factor=32
     #pragma HLS bind_storage variable=context type=ram_2p impl=uram
+
+    const int L = fifo_inst.read();
 
     for(int stage = 0; stage < 4; stage++){
         for(int i = 0; i < (L >> 4); i++){
@@ -1887,16 +1933,25 @@ void opt_kernel(
     tapa::stream<ap_uint<1024>, D_div_8+2> fifo_skip_x("fifo_skip_x");
     tapa::streams<ap_uint<512>, 2> fifo_res2("fifo_res2");
 
+    tapa::streams<int, NUM_SLR> fifo_inst_switch_acc0("fifo_inst_switch_acc0");
+    tapa::streams<int, NUM_SLR> fifo_inst_switch_acc1("fifo_inst_switch_acc1");
+    tapa::streams<int, NUM_SLR> fifo_inst_switch_sfu("fifo_inst_switch_sfu");
+    tapa::streams<int, NUM_SLR> fifo_inst_switch_context("fifo_inst_switch_context");
+    tapa::streams<int, NUM_SLR> fifo_inst_switch_gelu("fifo_inst_switch_gelu");
+    tapa::streams<int, NUM_SLR*2> fifo_inst_sfu_buffer("fifo_inst_sfu_buffer");
+    tapa::streams<int, NUM_SLR> fifo_inst_data_pack("fifo_inst_data_pack");
+    tapa::streams<int, NUM_SLR> fifo_inst_norm("fifo_inst_norm");
+
     tapa::task()
         .invoke<tapa::join>(read_inst, seq_len, fifo_inst_acc0, fifo_inst_acc1)
-        .invoke<tapa::join>(read_W, TOTAL_WEIGHT_SIZE, W_acc0, fifo_W_acc0)
-        .invoke<tapa::join>(read_W, TOTAL_WEIGHT_SIZE, W_acc1, fifo_W_acc1)
+        .invoke<tapa::join>(read_W, W_acc0, fifo_W_acc0)
+        .invoke<tapa::join>(read_W, W_acc1, fifo_W_acc1)
         .invoke<tapa::join>(read_X, L, X_acc0, fifo_X_acc0_slr0)
         .invoke<tapa::join>(read_X, L, X_acc1, fifo_X_acc1_slr0)
         .invoke<tapa::join>(
             temporal_acc0_slr0,
-            seq_len,
             fifo_inst_acc0, fifo_inst_acc0,
+            fifo_inst_switch_acc0,
             fifo_X_acc0_slr0, fifo_X_acc0,
             fifo_W_acc0, fifo_W_acc0,
             fifo_from_acc1_to_acc0,
@@ -1910,8 +1965,8 @@ void opt_kernel(
         )
         .invoke<tapa::join>(
             temporal_acc1_slr0,
-            seq_len,
             fifo_inst_acc1, fifo_inst_acc1,
+            fifo_inst_switch_acc1,
             fifo_X_acc1_slr0, fifo_X_acc1,
             fifo_W_acc1, fifo_W_acc1,
             fifo_from_acc1_to_acc0,
@@ -1936,8 +1991,8 @@ void opt_kernel(
         )
         .invoke<tapa::join, NUM_SLR-1>(
             temporal_acc0,
-            seq_len,
             fifo_inst_acc0, fifo_inst_acc0,
+            fifo_inst_switch_acc0,
             fifo_X_acc0, fifo_X_acc0,
             fifo_W_acc0, fifo_W_acc0,
             fifo_from_acc1_to_acc0,
@@ -1948,8 +2003,8 @@ void opt_kernel(
         )
         .invoke<tapa::join, NUM_SLR-1>(
             temporal_acc1,
-            seq_len,
             fifo_inst_acc1, fifo_inst_acc1,
+            fifo_inst_switch_acc1,
             fifo_X_acc1, fifo_X_acc1,
             fifo_W_acc1, fifo_W_acc1,
             fifo_from_acc1_to_acc0,
@@ -1959,41 +2014,44 @@ void opt_kernel(
             fifo_reduce_acc1, fifo_reduce_acc1,
             fifo_gelu_full
         )
+        .invoke<tapa::join, NUM_SLR>(packet_switch_acc, fifo_inst_switch_acc0, fifo_inst_switch_sfu, fifo_inst_switch_gelu)
+        .invoke<tapa::join, NUM_SLR>(packet_switch_acc, fifo_inst_switch_acc1, fifo_inst_switch_context, fifo_inst_norm)
         .invoke<tapa::join>(write_zero, seq_len, D_write_zero_acc0, fifo_reduce_acc0)
         .invoke<tapa::join>(write_zero, seq_len, D_write_zero_acc1, fifo_reduce_acc1)
         .invoke<tapa::join, NUM_SLR>(
-            sfu_acc_exp, seq_len,
+            sfu_acc_exp, fifo_inst_switch_sfu,
             fifo_acc0_to_sfu,
-            fifo_sfu_buf_in
+            fifo_sfu_buf_in,
+            fifo_inst_sfu_buffer
         )
         .invoke<tapa::join>(
-            sfu_buffer_slr0, seq_len,
+            sfu_buffer_slr0, fifo_inst_sfu_buffer,
             fifo_sfu_buf_in,
             fifo_ln_acc0,
             fifo_res2,
             fifo_sfu_buf_out
         )
         .invoke<tapa::join>(
-            sfu_buffer_slr0, seq_len,
+            sfu_buffer_slr0, fifo_inst_sfu_buffer,
             fifo_sfu_buf_in,
             fifo_ln_acc1,
             fifo_res2,
             fifo_sfu_buf_out
         )
         .invoke<tapa::join, (NUM_SLR-1)*2>(
-            sfu_buffer, seq_len,
+            sfu_buffer, fifo_inst_sfu_buffer,
             fifo_sfu_buf_in,
             fifo_sfu_buf_out
         )
         .invoke<tapa::join>(
-            sfu_norm_slr0, seq_len,
+            sfu_norm_slr0, fifo_inst_norm,
             fifo_sfu_buf_out,
             fifo_from_sfu_to_acc1,
             fifo_ffn_buffer_in,
             fifo_acc1_out
         )
         .invoke<tapa::join, NUM_SLR-1>(
-            sfu_norm, seq_len,
+            sfu_norm, fifo_inst_norm,
             fifo_sfu_buf_out,
             fifo_from_sfu_to_acc1
         )
@@ -2010,17 +2068,17 @@ void opt_kernel(
             fifo_res2
         )
         .invoke<tapa::join, NUM_SLR>(
-            context_buffer, seq_len,
+            context_buffer, fifo_inst_switch_context,
             fifo_context,
             fifo_cont_to_acc0, fifo_cont_to_acc1
         )
         .invoke<tapa::join, NUM_SLR>(
-            sfu_gelu, seq_len,
+            sfu_gelu, fifo_inst_switch_gelu, fifo_inst_data_pack,
             fifo_gelu_in,
             fifo_gelu_out
         )
         .invoke<tapa::join, NUM_SLR>(
-            data_packing, seq_len,
+            data_packing, fifo_inst_data_pack,
             fifo_gelu_out,
             fifo_gelu_full
         )
