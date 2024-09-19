@@ -41,12 +41,24 @@ template <typename data_t>
 inline void bh(tapa::istream<data_t> & q) {
 #pragma HLS inline
     for (;;) {
-#pragma HLS pipeline II=1 style=stp style=stp
+#pragma HLS pipeline II=1 style=stp
         data_t tmp; q.try_read(tmp);
     }
 }
 
+struct ConfigInst {
+    ap_uint<3> stage; // stage 7 -> read L
+    ap_uint<11> weight_bound;
+    ap_uint<7> i_bound;
+    ap_uint<7> j_bound;
+    ap_uint<8> k_bound;
+};
+
 void black_hole_int(tapa::istream<int> & fifo_in) {
+    bh(fifo_in);
+}
+
+void black_hole_inst(tapa::istream<ConfigInst> & fifo_in) {
     bh(fifo_in);
 }
 
@@ -75,7 +87,7 @@ void read_W(
     tapa::ostream<ap_uint<512>>& fifo_out
 ){
     for(int i_req = 0, i_resp = 0; i_resp < (TOTAL_WEIGHT_SIZE >> 7);){
-        #pragma HLS pipeline II=1 style=stp style=stp
+        #pragma HLS pipeline II=1 style=stp
         if((i_req < (TOTAL_WEIGHT_SIZE >> 7)) & !vec.read_addr.full()){
             vec.read_addr.write(i_req);
             i_req++;
@@ -111,32 +123,66 @@ void read_X(
 
 void read_inst(
     const int L,
-    tapa::ostream<int>& fifo_out_acc0,
-    tapa::ostream<int>& fifo_out_acc1
+    tapa::ostream<ConfigInst>& fifo_out_acc0,
+    tapa::ostream<ConfigInst>& fifo_out_acc1
 ){
+    ConfigInst len;
+    len.stage = 7;
+    len.weight_bound = L;
 
-    fifo_out_acc0.write(L);
-    fifo_out_acc1.write(L);
+    fifo_out_acc0.write(len);
+    fifo_out_acc1.write(len);
 
     for(int stage_i = 0; stage_i < 14; stage_i++){
         #pragma HLS pipeline II=1 style=stp
 
+        ConfigInst inst_acc0;
+        ConfigInst inst_acc1;
         const int stage = (stage_i < 12) ? (stage_i % 3) : (stage_i - 9);
+        
+        inst_acc0.stage = ap_uint<3>(stage);
+        inst_acc1.stage = ap_uint<3>(stage);
+        if(stage == 0){
+            inst_acc0.weight_bound = D_head_div_4;
+            inst_acc0.i_bound = (L >> 4);
+            inst_acc0.j_bound = D_head_div_16;
+            inst_acc0.k_bound = D_div_8;
 
-        if(stage == 3){
-            fifo_out_acc0.write(0);
-            fifo_out_acc1.write(0);
+            inst_acc1 = inst_acc0;
+        } else if (stage == 1){
+            inst_acc0.weight_bound = D_head_div_8;
+            inst_acc0.i_bound = (L >> 4);
+            inst_acc0.j_bound = D_head_div_32;
+            inst_acc0.k_bound = D_div_8;
 
-            fifo_out_acc0.write(L/2);
-            fifo_out_acc1.write(L/2);
+            inst_acc1 = inst_acc0;
+        } else if (stage == 2){
+            inst_acc0.weight_bound = 0;
+            inst_acc0.i_bound = (L >> 4);
+            inst_acc0.j_bound = (L >> 4);
+            inst_acc0.k_bound = D_head_div_8;
+
+            inst_acc1.weight_bound = 0;
+            inst_acc1.i_bound = (L >> 4);
+            inst_acc1.j_bound = D_head_div_16;
+            inst_acc1.k_bound = (L >> 3);
+        } else if (stage == 3){
+            inst_acc0.weight_bound = D_head;
+            inst_acc0.i_bound = (L >> 5);
+            inst_acc0.j_bound = D_div_16;
+            inst_acc0.k_bound = D_head_div_2;
+
+            inst_acc1 = inst_acc0;
+        } else {
+            inst_acc0.weight_bound = D_div_4;
+            inst_acc0.i_bound = (L >> 4);
+            inst_acc0.j_bound = D_div_16;
+            inst_acc0.k_bound = D_div_8;
+
+            inst_acc1 = inst_acc0;
         }
-        else{
-            fifo_out_acc0.write(0);
-            fifo_out_acc1.write(0);
-
-            fifo_out_acc0.write(L);
-            fifo_out_acc1.write(L);
-        }
+        fifo_out_acc0.write(inst_acc0);
+        fifo_out_acc1.write(inst_acc1);
     }
 }
 
@@ -190,8 +236,8 @@ void write_zero(
 
 // acc slr0 master node
 void temporal_acc0_slr0(
-    tapa::istream<int>& fifo_len_in,
-    tapa::ostream<int>& fifo_len_out,
+    tapa::istream<ConfigInst>& fifo_inst_in,
+    tapa::ostream<ConfigInst>& fifo_inst_out,
     tapa::ostream<int>& fifo_len_sfu,
     tapa::istream<ap_uint<512>>& fifo_X_in,
     tapa::ostream<ap_uint<1024>>& fifo_X_out, // 8-bit activation
@@ -222,8 +268,9 @@ void temporal_acc0_slr0(
     #pragma HLS array_partition variable=X cyclic dim=2 factor=2
     #pragma HLS bind_storage variable=X type=ram_2p impl=uram 
 
-    const int L = fifo_len_in.read();
-    fifo_len_out.write(L);
+    ConfigInst len = fifo_inst_in.read();
+    const int L = len.weight_bound;
+    fifo_inst_out.write(len);
     fifo_len_sfu.write(L);
 
     for(int stage_i = 0; stage_i < 14; stage_i++){
@@ -237,22 +284,15 @@ void temporal_acc0_slr0(
         ap_uint<32> W[D][D_div_8]; // TODO: reduce dimension
         #pragma HLS array_partition variable=W cyclic dim=1 factor=16
 
-        const int stage = (stage_i < 12) ? (stage_i % 3) : (stage_i - 9);
+        ConfigInst inst = fifo_inst_in.read();
+        fifo_inst_out.write(inst);
 
-        const int start = fifo_len_in.read();
-        const int end = fifo_len_in.read();
-        fifo_len_out.write(start);
-        fifo_len_out.write(end);
+        const ap_uint<3> stage = inst.stage;
 
         // load weights and forward
         if(stage != 2) { // TODO: 1d array & uniform access
-            int bound = D_head_div_4;
-            
-            if (stage == 3) bound = D_head;
-            else if (stage == 1) bound = D_head_div_8;
-            else if (stage == 4) bound = D_div_4;
-
-            for(int i = 0; i < bound; i++){
+            const int weight_bound = inst.weight_bound;
+            for(int i = 0; i < weight_bound; i++){
                 load_weight:
                 for(int j = 0; j < D_div_8;){
                     if(!fifo_W_in.empty()){
@@ -269,15 +309,13 @@ void temporal_acc0_slr0(
                 }
             }
         }
-
-        int j_bound = (stage == 2) ? (L >> 4) : D_head_div_16;
-        j_bound = (stage == 1) ? D_head_div_32 : j_bound;
-        j_bound = (stage >= 3) ? D_div_16 : j_bound;
-        int k_bound = (stage > 1 && stage < 4) ? D_head_div_8 : D_div_8;
-        k_bound = (stage == 3) ? D_head_div_2 : k_bound;
         
         // stage 1: compute Q 
-        for(int i = (start >> 4); i < (end >> 4); i++){ // make sure L is multiple of 16
+        const int i_bound = inst.i_bound;
+        const int j_bound = inst.j_bound;
+        const int k_bound = inst.k_bound;
+
+        for(int i = 0; i < i_bound; i++){ // make sure L is multiple of 16
 
             if(stage_i == 0){
                 for(int ii = 0; ii < 2; ii++){ // load only 1 time
@@ -499,8 +537,8 @@ void temporal_acc0_slr0(
 }
 
 void temporal_acc0(
-    tapa::istream<int>& fifo_len_in,
-    tapa::ostream<int>& fifo_len_out,
+    tapa::istream<ConfigInst>& fifo_inst_in,
+    tapa::ostream<ConfigInst>& fifo_inst_out,
     tapa::ostream<int>& fifo_len_sfu,
     tapa::istream<ap_uint<1024>>& fifo_X_in,
     tapa::ostream<ap_uint<1024>>& fifo_X_out, // 8-bit activation
@@ -523,8 +561,9 @@ void temporal_acc0(
     #pragma HLS array_partition variable=scratchpad_k cyclic dim=2 factor=2
     #pragma HLS bind_storage variable=scratchpad_k type=ram_2p impl=uram
 
-    const int L = fifo_len_in.read();
-    fifo_len_out.write(L);
+    ConfigInst len = fifo_inst_in.read();
+    const int L = len.weight_bound;
+    fifo_inst_out.write(len);
     fifo_len_sfu.write(L);
 
     for(int stage_i = 0; stage_i < 14; stage_i++){
@@ -538,21 +577,16 @@ void temporal_acc0(
         ap_uint<32> W[D][D_div_8]; // 4 bit
         #pragma HLS array_partition variable=W cyclic dim=1 factor=16
 
-        const int stage = (stage_i < 12) ? (stage_i % 3) : stage_i - 9;
+        ConfigInst inst = fifo_inst_in.read();
+        fifo_inst_out.write(inst);
 
-        const int start = fifo_len_in.read();
-        const int end = fifo_len_in.read();
-        fifo_len_out.write(start);
-        fifo_len_out.write(end);
+        const ap_uint<3> stage = inst.stage;
+
 
         // load weights and forward
         if(stage != 2) {
-            int bound = D_head_div_4;
-            
-            if (stage == 3) bound = D_head;
-            else if (stage == 1) bound = D_head_div_8;
-            else if (stage == 4) bound = D_div_4;
-            for(int i = 0; i < bound; i++){
+            const int weight_bound = inst.weight_bound;
+            for(int i = 0; i < weight_bound; i++){
                 load_weight:
                 for(int j = 0; j < D_div_8;){
                     if(!fifo_W_in.empty()){
@@ -569,15 +603,13 @@ void temporal_acc0(
                 }
             }
         }
-
-        int j_bound = (stage == 2) ? (L >> 4) : D_head_div_16;
-        j_bound = (stage == 1) ? D_head_div_32 : j_bound;
-        j_bound = (stage >= 3) ? D_div_16 : j_bound;
-        int k_bound = (stage > 1 && stage < 4) ? D_head_div_8 : D_div_8;
-        k_bound = (stage == 3) ? D_head_div_2 : k_bound;
         
+        const int i_bound = inst.i_bound;
+        const int j_bound = inst.j_bound;
+        const int k_bound = inst.k_bound;
+
         // stage 1: compute Q 
-        for(int i = (start >> 4); i < (end >> 4); i++){ // make sure L is multiple of 64
+        for(int i = 0; i < i_bound; i++){ // make sure L is multiple of 64
             for(int j = 0; j < j_bound; j++){
                 #pragma HLS loop_flatten off
 
@@ -761,8 +793,8 @@ void temporal_acc0(
 
 // acc slr0 master node
 void temporal_acc1_slr0(
-    tapa::istream<int>& fifo_len_in,
-    tapa::ostream<int>& fifo_len_out,
+    tapa::istream<ConfigInst>& fifo_inst_in,
+    tapa::ostream<ConfigInst>& fifo_inst_out,
     tapa::ostream<int>& fifo_len_context,
     tapa::istream<ap_uint<512>>& fifo_X_in,
     tapa::ostream<ap_uint<1024>>& fifo_X_out, // 8-bit activation
@@ -793,8 +825,9 @@ void temporal_acc1_slr0(
     // #pragma HLS array_partition variable=scratchpad_out cyclic dim=1 factor=16
     // #pragma HLS array_partition variable=scratchpad_out cyclic dim=2 factor=2
 
-    const int L = fifo_len_in.read();
-    fifo_len_out.write(L);
+    ConfigInst len = fifo_inst_in.read();
+    const int L = len.weight_bound;
+    fifo_inst_out.write(len);
     fifo_len_context.write(L);
 
     for(int stage_i = 0; stage_i < 14; stage_i++){
@@ -807,20 +840,14 @@ void temporal_acc1_slr0(
         ap_uint<32> W[D][D_div_8]; // 4 bit
         #pragma HLS array_partition variable=W cyclic dim=1 factor=16
 
-        const int start = fifo_len_in.read();
-        const int end = fifo_len_in.read();
-        fifo_len_out.write(start);
-        fifo_len_out.write(end);
+        ConfigInst inst = fifo_inst_in.read();
+        fifo_inst_out.write(inst);
 
-        const int stage = (stage_i < 12) ? (stage_i % 3) : (stage_i - 9);
+        const ap_uint<3> stage = inst.stage;
         // load weights and forward
         if(stage != 2) {
-            int bound = D_head_div_4;
-            
-            if (stage == 3) bound = D_head;
-            else if (stage == 1) bound = D_head_div_8;
-            else if (stage == 4) bound = D_div_4;
-            for(int i = 0; i < bound; i++){
+            const int weight_bound = inst.weight_bound;
+            for(int i = 0; i < weight_bound; i++){
                 load_weight:
                 for(int j = 0; j < D_div_8;){
                     if(!fifo_W_in.empty()){
@@ -838,12 +865,11 @@ void temporal_acc1_slr0(
             }
         }
 
-        int k_bound = (stage == 2) ? (L >> 3) : D_div_8;
-        k_bound = (stage == 3) ? D_head_div_2 : k_bound;
-        int j_bound = (stage >= 3) ? D_div_16 : D_head_div_16;
-        j_bound = (stage == 1) ? D_head_div_32 : j_bound;
+        const int i_bound = inst.i_bound;
+        const int j_bound = inst.j_bound;
+        const int k_bound = inst.k_bound;
         
-        for(int i = (start >> 4); i < (end >> 4); i++){ // make sure L is multiple of 4
+        for(int i = 0; i < i_bound; i++){ // make sure L is multiple of 4
 
             ap_uint<32> cache_attn[MAX_SEQ_LEN_div_8][16];
             #pragma HLS array_partition variable=cache_attn dim=2 complete
@@ -1112,8 +1138,8 @@ void residual(
 
 
 void temporal_acc1(
-    tapa::istream<int>& fifo_len_in,
-    tapa::ostream<int>& fifo_len_out,
+    tapa::istream<ConfigInst>& fifo_inst_in,
+    tapa::ostream<ConfigInst>& fifo_inst_out,
     tapa::ostream<int>& fifo_len_context,
     tapa::istream<ap_uint<1024>>& fifo_X_in,
     tapa::ostream<ap_uint<1024>>& fifo_X_out, // 8-bit activation
@@ -1137,8 +1163,9 @@ void temporal_acc1(
     // #pragma HLS array_partition variable=scratchpad_out cyclic dim=1 factor=16
     // #pragma HLS array_partition variable=scratchpad_out cyclic dim=2 factor=2
 
-    const int L = fifo_len_in.read();
-    fifo_len_out.write(L);
+    ConfigInst len = fifo_inst_in.read();
+    const int L = len.weight_bound;
+    fifo_inst_out.write(len);
     fifo_len_context.write(L);
 
     for(int stage_i = 0; stage_i < 14; stage_i++){
@@ -1151,21 +1178,15 @@ void temporal_acc1(
         ap_uint<32> W[D][D_div_8]; // 4 bit
         #pragma HLS array_partition variable=W cyclic dim=1 factor=16
 
-        const int start = fifo_len_in.read();
-        const int end = fifo_len_in.read();
-        fifo_len_out.write(start);
-        fifo_len_out.write(end);
+        ConfigInst inst = fifo_inst_in.read();
+        fifo_inst_out.write(inst);
 
-        const int stage = (stage_i < 12) ? (stage_i % 3) : (stage_i - 9);
+        const ap_uint<3> stage = inst.stage;
 
         // load weights and forward
         if(stage != 2) {
-            int bound = D_head_div_4;
-            
-            if (stage == 3) bound = D_head;
-            else if (stage == 1) bound = D_head_div_8;
-            else if (stage == 4) bound = D_div_4;
-            for(int i = 0; i < bound; i++){
+            const int weight_bound = inst.weight_bound;
+            for(int i = 0; i < weight_bound; i++){
                 load_weight:
                 for(int j = 0; j < D_div_8;){
                     if(!fifo_W_in.empty()){
@@ -1182,13 +1203,12 @@ void temporal_acc1(
                 }
             }
         }
-
-        int k_bound = (stage == 2) ? (L >> 3) : D_div_8;
-        k_bound = (stage == 3) ? D_head_div_2 : k_bound;
-        int j_bound = (stage >= 3) ? D_div_16 : D_head_div_16;
-        j_bound = (stage == 1) ? D_head_div_32 : j_bound;
         
-        for(int i = (start >> 4); i < (end >> 4); i++){ // make sure L is multiple of 4
+        const int i_bound = inst.i_bound;
+        const int j_bound = inst.j_bound;
+        const int k_bound = inst.k_bound;
+
+        for(int i = 0; i < i_bound; i++){ // make sure L is multiple of 4
 
             ap_uint<32> cache_attn[MAX_SEQ_LEN_div_8][16];
             #pragma HLS array_partition variable=cache_attn dim=2 complete
@@ -1314,7 +1334,7 @@ void temporal_acc1(
                     #pragma HLS unroll
                     for(int k = 0; k < 16; k++){
                         #pragma HLS unroll
-                        acc_final[ii][k] = 0;
+                        acc_final[ii][k] = -(k_bound << 2);;
                     }
                 }
 
@@ -1929,8 +1949,8 @@ void opt_kernel(
     // tapa::mmap<ap_uint<64>> acc1_out,
     tapa::mmap<int> cycle_count
 ){
-    tapa::streams<int, NUM_SLR+1, 4> fifo_inst_acc0("fifo_inst_acc0");
-    tapa::streams<int, NUM_SLR+1, 4> fifo_inst_acc1("fifo_inst_acc1");
+    tapa::streams<ConfigInst, NUM_SLR+1, 4> fifo_inst_acc0("fifo_inst_acc0");
+    tapa::streams<ConfigInst, NUM_SLR+1, 4> fifo_inst_acc1("fifo_inst_acc1");
     tapa::stream<ap_uint<512>, 16> fifo_X_acc0_slr0("fifo_X_acc0_slr0");
     tapa::stream<ap_uint<512>, 16> fifo_X_acc1_slr0("fifo_X_acc1_slr0");
     tapa::streams<ap_uint<1024>, NUM_SLR, 4> fifo_X_acc0("fifo_X_acc0");
@@ -2124,8 +2144,8 @@ void opt_kernel(
         .invoke<tapa::join>(write_mtx, L_out, acc0_out, fifo_acc1_out, fifo_fin)
         // .invoke<tapa::join>(write_mtx, L_out, acc1_out, fifo_acc1_out)
         .invoke<tapa::join>(measure_cycle, fifo_fin, cycle_count)
-        .invoke<tapa::detach>(black_hole_int, fifo_inst_acc0)
-        .invoke<tapa::detach>(black_hole_int, fifo_inst_acc1)
+        .invoke<tapa::detach>(black_hole_inst, fifo_inst_acc0)
+        .invoke<tapa::detach>(black_hole_inst, fifo_inst_acc1)
         .invoke<tapa::detach>(black_hole_ap_uint_1024, fifo_X_acc0)
         .invoke<tapa::detach>(black_hole_ap_uint_1024, fifo_X_acc1)
         .invoke<tapa::detach>(black_hole_ap_uint_512, fifo_W_acc0)
