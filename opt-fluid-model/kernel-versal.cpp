@@ -334,7 +334,7 @@ void temporal_acc0_slr0(
                 }
             }
 
-            for(int j = 0; j < j_bound; j++){
+            for(int j = 0; (j < j_bound) & ((stage != 2) | (j <= i)); j++){
                 #pragma HLS loop_flatten off
 
                 ap_int<22> acc_vec[2][3][16][16];
@@ -610,7 +610,7 @@ void temporal_acc0(
 
         // stage 1: compute Q 
         for(int i = 0; i < i_bound; i++){ // make sure L is multiple of 64
-            for(int j = 0; j < j_bound; j++){
+            for(int j = 0; (j < j_bound) & ((stage != 2) | (j <= i)); j++){
                 #pragma HLS loop_flatten off
 
                 ap_int<22> acc_vec[2][3][16][16];
@@ -867,9 +867,10 @@ void temporal_acc1_slr0(
 
         const int i_bound = inst.i_bound;
         const int j_bound = inst.j_bound;
-        const int k_bound = inst.k_bound;
         
         for(int i = 0; i < i_bound; i++){ // make sure L is multiple of 4
+
+            const int k_bound = (stage == 2) ? ap_uint<8>((i+1)*2) : inst.k_bound;
 
             ap_uint<32> cache_attn[MAX_SEQ_LEN_div_8][16];
             #pragma HLS array_partition variable=cache_attn dim=2 complete
@@ -891,7 +892,7 @@ void temporal_acc1_slr0(
                     }
                 }
             } else if (stage == 2) {
-                for(int ii = 0; ii < (L >> 3); ii++){
+                for(int ii = 0; ii < ((i+1)*2); ii++){
                     ap_uint<32> fuse_reg[16];
                     load_attn:
                     for(int offset = 0; offset < 8;){
@@ -1206,16 +1207,17 @@ void temporal_acc1(
         
         const int i_bound = inst.i_bound;
         const int j_bound = inst.j_bound;
-        const int k_bound = inst.k_bound;
 
         for(int i = 0; i < i_bound; i++){ // make sure L is multiple of 4
+
+            const int k_bound = (stage == 2) ? ap_uint<8>((i+1)*2) : inst.k_bound;
 
             ap_uint<32> cache_attn[MAX_SEQ_LEN_div_8][16];
             #pragma HLS array_partition variable=cache_attn dim=2 complete
             #pragma HLS array_partition variable=cache_attn dim=1 cyclic factor=2
 
             if(stage == 2){
-                for(int ii = 0; ii < (L >> 3); ii++){
+                for(int ii = 0; ii < (i+1)*2; ii++){
                     ap_uint<32> fuse_reg[16];
                     load_attn:
                     for(int offset = 0; offset < 8;){
@@ -1425,6 +1427,8 @@ void sfu_buffer( // double buffering
             float cache[MAX_SEQ_LEN][16];
             #pragma HLS array_partition variable=cache dim=2 complete
             #pragma HLS array_partition variable=sum dim=2 complete
+
+            const int hidden_bound = fifo_inst.read();
             
             for(int i = 0; i < 8; i++){
                 for(int j = 0; j < 16; j++){
@@ -1434,7 +1438,7 @@ void sfu_buffer( // double buffering
             }
 
         acc:
-            for(int i = 0; i < L; i++){
+            for(int i = 0; i < hidden_bound; i++){
                 #pragma HLS pipeline II=1 style=stp
                 #pragma HLS dependence false variable=sum
                 #pragma HLS dependence true variable=sum distance=8
@@ -1466,7 +1470,7 @@ void sfu_buffer( // double buffering
             fifo_data_out.write(tmp);
 
         write:
-            for(int i = 0; i < L; i++){
+            for(int i = 0; i < hidden_bound; i++){
                 #pragma HLS pipeline II=1 style=stp
                 ap_uint<512> tmp;
                 for(int j = 0; j < 16; j++){
@@ -1491,7 +1495,7 @@ void sfu_buffer_slr0( // double buffering
     const int L = fifo_inst.read();
     for(int stage = 0; stage < 6; stage++){
 
-        const int hidden_bound = (stage < 4) ? L : D;
+        int hidden_bound = D;
 
         for(int l = 0; l < (L >> 5); l++){
             float sum[8][16];
@@ -1500,6 +1504,8 @@ void sfu_buffer_slr0( // double buffering
             #pragma HLS array_partition variable=cache dim=2 complete
             #pragma HLS array_partition variable=sum dim=2 complete
             #pragma HLS array_partition variable=var dim=2 complete
+
+            if(stage < 4) hidden_bound = fifo_inst.read();
             
             for(int i = 0; i < 8; i++){
                 for(int j = 0; j < 16; j++){
@@ -1583,8 +1589,9 @@ void sfu_acc_exp(
     for(int stage = 0; stage < 4; stage++){
 
         for(int l = 0; l < (L >> 4); l++){
+            fifo_inst_out[l%2].write(((l+1) << 4));
             exp_acc:
-            for(int i = 0; i < L;){
+            for(int i = 0; i < ((l+1) << 4);){
                 #pragma HLS pipeline II=1 style=stp
                 if(!fifo_data_in.empty()){
                     ap_uint<512> tmp; fifo_data_in.try_read(tmp);
@@ -1705,7 +1712,7 @@ void sfu_norm(
                 sum[i] = 32.0 / tapa::bit_cast<float>(ap_uint<32>(tmp_in(i*32+31, i*32)));
             }
 
-            for(int i = 0; i < L;){
+            for(int i = 0; i < ((l+1) << 4);){
                 #pragma HLS pipeline II=1 style=stp
                 if(!fifo_buf[l%2].empty()){
                     ap_uint<512> tmp_cache; fifo_buf[l%2].try_read(tmp_cache);
@@ -1733,7 +1740,6 @@ void sfu_norm_slr0(
     const int L = fifo_inst.read();
 
     for(int stage = 0; stage < 6; stage++){
-        const int hidden_bound = (stage < 4) ? L : D;
 
         for(int l = 0; l < (L >> 4); l++){
             float sum[16];
@@ -1744,6 +1750,7 @@ void sfu_norm_slr0(
             #pragma HLS array_partition variable=var complete
 
             const int fifo_idx = l%2;
+            const int hidden_bound = (stage < 4) ? ((l+1) << 4) : D;
 
             ap_uint<512> tmp_in = fifo_buf[fifo_idx].read();
             ap_uint<512> tmp_var;
