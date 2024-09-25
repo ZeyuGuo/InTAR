@@ -967,7 +967,7 @@ void temporal_acc1_slr0(
                             op1_mtx[ii] = ap_uint<72>(ap_uint<36>((ap_int<4>(2), W[j*16+ii][k])));
                             op2_mtx[ii] = ap_uint<72>((ap_int<8>(2), X[i*16+ii][k]));
                         } else {
-                            op1_mtx[ii] = ap_uint<72>((ap_int<8>(2), scratchpad[k*8+ii/2][j*2+(ii%2)])); 
+                            op1_mtx[ii] = ap_uint<72>((ap_int<8>(2), scratchpad[(k/2)*16+ii][j*2+(k%2)])); 
                             op2_mtx[ii] = ap_uint<72>((ap_int<8>(2), cache_attn[k][ii]));
                         }
                     }
@@ -1295,7 +1295,7 @@ void temporal_acc1(
                             op1_mtx[ii] = ap_uint<72>(ap_uint<36>((ap_int<4>(2), W[j*16+ii][k])));
                             op2_mtx[ii] = ap_uint<72>((ap_int<8>(2), recv_pkt(ii*64+63, ii*64)));
                         } else {
-                            op1_mtx[ii] = ap_uint<72>((ap_int<8>(2), scratchpad[k*8+ii/2][j*2+(ii%2)])); 
+                            op1_mtx[ii] = ap_uint<72>((ap_int<8>(2), scratchpad[(k/2)*16+ii][j*2+(k%2)])); 
                             op2_mtx[ii] = ap_uint<72>((ap_int<8>(2), cache_attn[k][ii]));
                         }
                     }
@@ -1345,7 +1345,7 @@ void temporal_acc1(
                     #pragma HLS unroll
                     for(int k = 0; k < 16; k++){
                         #pragma HLS unroll
-                        acc_final[ii][k] = -(k_bound << 2);;
+                        acc_final[ii][k] = -(k_bound << 2);
                     }
                 }
 
