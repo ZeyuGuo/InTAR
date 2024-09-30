@@ -820,9 +820,9 @@ void temporal_acc1_slr0(
     #pragma HLS array_partition variable=X cyclic dim=2 factor=2
     #pragma HLS bind_storage variable=X type=ram_2p impl=uram
 
-    ap_uint<64> scratchpad[MAX_SEQ_LEN][D_head_div_8]; // 8 bit
-    #pragma HLS array_partition variable=scratchpad cyclic dim=1 factor=16
-    #pragma HLS array_partition variable=scratchpad cyclic dim=2 factor=2
+    ap_uint<64> scratchpad[MAX_SEQ_LEN_div_8][D_head]; // 8 bit
+    #pragma HLS array_partition variable=scratchpad cyclic dim=1 factor=2
+    #pragma HLS array_partition variable=scratchpad cyclic dim=2 factor=16
     #pragma HLS bind_storage variable=scratchpad type=ram_2p impl=bram
 
     // ap_uint<64> scratchpad_out[MAX_SEQ_LEN][D_head_div_8];
@@ -967,7 +967,7 @@ void temporal_acc1_slr0(
                             op1_mtx[ii] = ap_uint<72>(ap_uint<36>((ap_int<4>(2), W[j*16+ii][k])));
                             op2_mtx[ii] = ap_uint<72>((ap_int<8>(2), X[i*16+ii][k]));
                         } else {
-                            op1_mtx[ii] = ap_uint<72>((ap_int<8>(2), scratchpad[(k/2)*16+ii][j*2+(k%2)])); 
+                            op1_mtx[ii] = ap_uint<72>((ap_int<8>(2), scratchpad[k][j*16+ii])); 
                             op2_mtx[ii] = ap_uint<72>((ap_int<8>(2), cache_attn[k][ii]));
                         }
                     }
@@ -1047,8 +1047,8 @@ void temporal_acc1_slr0(
                         #pragma HLS unroll
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
-                            int offset = k%8;
-                            scratchpad[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[k][ii] >> 5); 
+                            int offset = ii%8;
+                            scratchpad[i*2+ii/8][j*16+k](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 5); 
                         }
                     }
                 } else if (stage == 2){
@@ -1163,9 +1163,9 @@ void temporal_acc1(
     tapa::istream<ap_uint<1024>>& fifo_gelu_in
 ){
 
-    ap_uint<64> scratchpad[MAX_SEQ_LEN][D_head_div_8]; // 8 bit
-    #pragma HLS array_partition variable=scratchpad cyclic dim=1 factor=16
-    #pragma HLS array_partition variable=scratchpad cyclic dim=2 factor=2
+    ap_uint<64> scratchpad[MAX_SEQ_LEN_div_8][D_head]; // 8 bit
+    #pragma HLS array_partition variable=scratchpad cyclic dim=1 factor=2
+    #pragma HLS array_partition variable=scratchpad cyclic dim=2 factor=16
     #pragma HLS bind_storage variable=scratchpad type=ram_2p impl=bram
 
     // ap_uint<64> scratchpad_out[MAX_SEQ_LEN][D_head_div_8];
@@ -1295,7 +1295,7 @@ void temporal_acc1(
                             op1_mtx[ii] = ap_uint<72>(ap_uint<36>((ap_int<4>(2), W[j*16+ii][k])));
                             op2_mtx[ii] = ap_uint<72>((ap_int<8>(2), recv_pkt(ii*64+63, ii*64)));
                         } else {
-                            op1_mtx[ii] = ap_uint<72>((ap_int<8>(2), scratchpad[(k/2)*16+ii][j*2+(k%2)])); 
+                            op1_mtx[ii] = ap_uint<72>((ap_int<8>(2), scratchpad[k][j*16+ii])); 
                             op2_mtx[ii] = ap_uint<72>((ap_int<8>(2), cache_attn[k][ii]));
                         }
                     }
@@ -1367,8 +1367,8 @@ void temporal_acc1(
                         #pragma HLS unroll
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
-                            int offset = k%8;
-                            scratchpad[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[k][ii] >> 5); 
+                            int offset = ii%8;
+                            scratchpad[i*2+ii/8][j*16+k](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 5); 
                         }
                     }
                 } else if (stage == 2){
