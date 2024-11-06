@@ -1,6 +1,7 @@
 #include <cmath>
 #include <string>
 #include <tapa.h>
+#define AP_INT_MAX_W 2048
 #include <ap_int.h>
 #include <hls_math.h>
 
@@ -74,7 +75,15 @@ void black_hole_w(tapa::istream<int4_v128> & fifo_in) {
     bh(fifo_in);
 }
 
+void black_hole_ap_uint_8(tapa::istream<ap_uint<8>> & fifo_in) {
+    bh(fifo_in);
+}
+
 void black_hole_ap_uint_512(tapa::istream<ap_uint<512>> & fifo_in) {
+    bh(fifo_in);
+}
+
+void black_hole_ap_uint_576(tapa::istream<ap_uint<576>> & fifo_in) {
     bh(fifo_in);
 }
 
@@ -234,6 +243,254 @@ void write_zero(
     }
 }
 
+void PE_GEMM_acc0( // 2x2 systolic array
+    const int idx,
+    const int idy,
+    tapa::istream<ap_uint<8>>& fifo_bound_in,
+    tapa::ostream<ap_uint<8>>& fifo_bound_out,
+    tapa::istream<ap_uint<576>>& fifo_in_x, // 8*72
+    tapa::ostream<ap_uint<576>>& fifo_out_x, 
+    tapa::istream<ap_uint<576>>& fifo_in_y, 
+    tapa::ostream<ap_uint<576>>& fifo_out_y,
+    tapa::ostream<ap_uint<1536>>& fifo_drain
+){
+    for(;;){
+        const int k_bound = fifo_bound_in.read();
+        fifo_bound_out.write(ap_uint<8>(k_bound));
+        const int stage = fifo_bound_in.read();
+        fifo_bound_out.write(ap_uint<8>(stage));
+
+        ap_int<22> acc_vec[2][3][8][8];
+        #pragma HLS array_partition variable=acc_vec dim=1 complete
+        #pragma HLS array_partition variable=acc_vec dim=2 complete
+        #pragma HLS array_partition variable=acc_vec dim=3 complete
+        #pragma HLS array_partition variable=acc_vec dim=4 complete
+
+        for(int l = 0; l < 2; l++){
+            #pragma HLS unroll
+            for(int ii = 0; ii < 3; ii++){
+                #pragma HLS unroll
+                for(int kk = 0; kk < 8; kk++){
+                    #pragma HLS unroll
+                    for(int k = 0; k < 8; k++){
+                        #pragma HLS unroll
+                        acc_vec[l][ii][kk][k] = 0;
+                    }
+                }
+            }
+        }
+
+compute:
+        for(int k = 0; k < k_bound; k++){
+            #pragma HLS pipeline II=1 style=stp
+            #pragma HLS dependence variable=acc_vec type=inter distance=2 true
+            ap_uint<576> tmp_x = fifo_in_x.read();
+            ap_uint<576> tmp_y = fifo_in_y.read();
+            fifo_out_x.write(tmp_x);
+            fifo_out_y.write(tmp_y);
+
+            for(int kk = 0; kk < 8; kk++){
+                #pragma HLS unroll
+                for(int l = 0; l < 8; l++){
+                    #pragma HLS unroll
+                    ap_uint<72> op1 = tmp_x(l*72+71, l*72);
+                    ap_uint<72> op2 = tmp_y(kk*72+71, kk*72);
+                    
+                    ap_int<22> res0 = acc_vec[k%2][0][kk][l];
+                    ap_int<22> res1 = acc_vec[k%2][1][kk][l];
+                    ap_int<22> res2 = acc_vec[k%2][2][kk][l];
+                    ap_int<8> a0; ap_int<8> a1; ap_int<8> a2;
+                    ap_int<8> b0; ap_int<8> b1; ap_int<8> b2;
+                    ap_int<8> a0_1; ap_int<8> a1_1; ap_int<8> a2_1;
+                    ap_int<8> b0_1; ap_int<8> b1_1; ap_int<8> b2_1;
+                    ap_int<8> a0_2; ap_int<8> a1_2; ap_int<8> a2_2;
+                    ap_int<8> b0_2; ap_int<8> b1_2; ap_int<8> b2_2;
+                    (a2_2, a1_2, a0_2, a2_1, a1_1, a0_1, a2, a1, a0) = op2;
+                    if(stage==2){
+                        (b2_2, b1_2, b0_2, b2_1, b1_1, b0_1, b2, b1, b0) = op1;
+                    }else{
+                        b0 = ap_int<4>(op1(3, 0));
+                        b1 = ap_int<4>(op1(7, 4));
+                        b2 = ap_int<4>(op1(11, 8));
+                        b0_1 = ap_int<4>(op1(15, 12));
+                        b1_1 = ap_int<4>(op1(19, 16));
+                        b2_1 = ap_int<4>(op1(23, 20));
+                        b0_2 = ap_int<4>(op1(27, 24));
+                        b1_2 = ap_int<4>(op1(31, 28));
+                        b2_2 = ap_int<4>(op1(35, 32));
+                    }
+                    res0 = (((a0 * b0) + (a1 * b1)) + (a2 * b2)) + res0;
+                    res1 = (((a0_1 * b0_1) + (a1_1 * b1_1)) + (a2_1 * b2_1)) + res1;
+                    res2 = (((a0_2 * b0_2) + (a1_2 * b1_2)) + (a2_2 * b2_2)) + res2;
+                    acc_vec[k%2][0][kk][l] = res0;
+                    acc_vec[k%2][1][kk][l] = res1;
+                    acc_vec[k%2][2][kk][l] = res2;
+                }
+            }
+        }
+
+        ap_int<24> acc_final[8][8];
+        #pragma HLS array_partition variable=acc_final dim=1 complete
+        #pragma HLS array_partition variable=acc_final dim=2 complete
+
+        for(int ii = 0; ii < 8; ii++){
+            #pragma HLS unroll
+            for(int k = 0; k < 8; k++){
+                #pragma HLS unroll
+                acc_final[ii][k] = -(k_bound << 2);
+            }
+        }
+
+reduction:
+        for(int k = 0; k < 2; k++){
+            for(int ii = 0; ii < 3; ii++){
+                for(int kk = 0; kk < 8; kk++){
+                    #pragma HLS unroll
+                    for(int l = 0; l < 8; l++){
+                        #pragma HLS unroll
+                        acc_final[kk][l] += acc_vec[k][ii][kk][l];
+                    }
+                }
+            }
+        }
+
+        ap_uint<1536> final_result;
+        for(int i = 0; i < 8; i++){
+            #pragma HLS unroll
+            for(int j = 0; j < 8; j++){
+                #pragma HLS unroll
+                final_result(i*192+j*24+23, i*192+j*24) = acc_final[i][j];
+            }
+        }
+        fifo_drain.write(final_result);
+
+    }
+}
+
+void PE_GEMM_acc1( // 2x2 systolic array
+    const int idx,
+    const int idy,
+    tapa::istream<ap_uint<8>>& fifo_bound_in,
+    tapa::ostream<ap_uint<8>>& fifo_bound_out,
+    tapa::istream<ap_uint<576>>& fifo_in_x, // 8*72
+    tapa::ostream<ap_uint<576>>& fifo_out_x, 
+    tapa::istream<ap_uint<576>>& fifo_in_y, 
+    tapa::ostream<ap_uint<576>>& fifo_out_y,
+    tapa::ostream<ap_uint<1728>>& fifo_drain
+){
+    for(;;){
+        const int k_bound = fifo_bound_in.read();
+        fifo_bound_out.write(k_bound);
+        const int stage = fifo_bound_in.read();
+        fifo_bound_out.write(stage);
+
+        ap_int<24> acc_vec[2][3][8][8];
+        #pragma HLS array_partition variable=acc_vec dim=1 complete
+        #pragma HLS array_partition variable=acc_vec dim=2 complete
+        #pragma HLS array_partition variable=acc_vec dim=3 complete
+        #pragma HLS array_partition variable=acc_vec dim=4 complete
+
+        for(int l = 0; l < 2; l++){
+            #pragma HLS unroll
+            for(int ii = 0; ii < 3; ii++){
+                #pragma HLS unroll
+                for(int kk = 0; kk < 8; kk++){
+                    #pragma HLS unroll
+                    for(int k = 0; k < 8; k++){
+                        #pragma HLS unroll
+                        acc_vec[l][ii][kk][k] = 0;
+                    }
+                }
+            }
+        }
+
+compute:
+        for(int k = 0; k < k_bound; k++){
+            #pragma HLS pipeline II=1 style=stp
+            #pragma HLS dependence variable=acc_vec type=inter distance=2 true
+            ap_uint<576> tmp_x = fifo_in_x.read();
+            ap_uint<576> tmp_y = fifo_in_y.read();
+            fifo_out_x.write(tmp_x);
+            fifo_out_y.write(tmp_y);
+
+            for(int kk = 0; kk < 8; kk++){
+                #pragma HLS unroll
+                for(int l = 0; l < 8; l++){
+                    #pragma HLS unroll
+                    ap_uint<72> op1 = tmp_x(l*72+71, l*72);
+                    ap_uint<72> op2 = tmp_y(kk*72+71, kk*72);
+                    
+                    ap_int<24> res0 = acc_vec[k%2][0][kk][l];
+                    ap_int<24> res1 = acc_vec[k%2][1][kk][l];
+                    ap_int<24> res2 = acc_vec[k%2][2][kk][l];
+                    ap_int<8> a0; ap_int<8> a1; ap_int<8> a2;
+                    ap_int<8> b0; ap_int<8> b1; ap_int<8> b2;
+                    ap_int<8> a0_1; ap_int<8> a1_1; ap_int<8> a2_1;
+                    ap_int<8> b0_1; ap_int<8> b1_1; ap_int<8> b2_1;
+                    ap_int<8> a0_2; ap_int<8> a1_2; ap_int<8> a2_2;
+                    ap_int<8> b0_2; ap_int<8> b1_2; ap_int<8> b2_2;
+                    (a2_2, a1_2, a0_2, a2_1, a1_1, a0_1, a2, a1, a0) = op2;
+                    if(stage==2){
+                        (b2_2, b1_2, b0_2, b2_1, b1_1, b0_1, b2, b1, b0) = op1;
+                    }else{
+                        b0 = ap_int<4>(op1(3, 0));
+                        b1 = ap_int<4>(op1(7, 4));
+                        b2 = ap_int<4>(op1(11, 8));
+                        b0_1 = ap_int<4>(op1(15, 12));
+                        b1_1 = ap_int<4>(op1(19, 16));
+                        b2_1 = ap_int<4>(op1(23, 20));
+                        b0_2 = ap_int<4>(op1(27, 24));
+                        b1_2 = ap_int<4>(op1(31, 28));
+                        b2_2 = ap_int<4>(op1(35, 32));
+                    }
+                    res0 = (((a0 * b0) + (a1 * b1)) + (a2 * b2)) + res0;
+                    res1 = (((a0_1 * b0_1) + (a1_1 * b1_1)) + (a2_1 * b2_1)) + res1;
+                    res2 = (((a0_2 * b0_2) + (a1_2 * b1_2)) + (a2_2 * b2_2)) + res2;
+                    acc_vec[k%2][0][kk][l] = res0;
+                    acc_vec[k%2][1][kk][l] = res1;
+                    acc_vec[k%2][2][kk][l] = res2;
+                }
+            }
+        }
+
+        ap_int<27> acc_final[8][8];
+        #pragma HLS array_partition variable=acc_final dim=1 complete
+        #pragma HLS array_partition variable=acc_final dim=2 complete
+
+        for(int ii = 0; ii < 8; ii++){
+            #pragma HLS unroll
+            for(int k = 0; k < 8; k++){
+                #pragma HLS unroll
+                acc_final[ii][k] = -(k_bound << 2);
+            }
+        }
+
+reduction:
+        for(int k = 0; k < 2; k++){
+            for(int ii = 0; ii < 3; ii++){
+                for(int kk = 0; kk < 8; kk++){
+                    #pragma HLS unroll
+                    for(int l = 0; l < 8; l++){
+                        #pragma HLS unroll
+                        acc_final[kk][l] += acc_vec[k][ii][kk][l];
+                    }
+                }
+            }
+        }
+
+        ap_uint<1728> final_result;
+        for(int i = 0; i < 8; i++){
+            #pragma HLS unroll
+            for(int j = 0; j < 8; j++){
+                #pragma HLS unroll
+                final_result(i*216+j*27+26, i*216+j*27) = acc_final[i][j];
+            }
+        }
+        fifo_drain.write(final_result);
+
+    }
+}
+
 // acc slr0 master node
 void temporal_acc0_slr0(
     tapa::istream<ConfigInst>& fifo_inst_in,
@@ -249,9 +506,15 @@ void temporal_acc0_slr0(
     tapa::istream<ap_uint<1024>>& fifo_context,
     tapa::istream<ap_uint<1024>>& fifo_ffn_in,
     tapa::istream<ap_uint<512>>& fifo_reduce_recv,
-    tapa::ostream<ap_uint<512>>& fifo_res_send
-    // tapa::ostream<ap_uint<64>>& fifo_write,
-    // tapa::ostream<bool>& fifo_fin
+    tapa::ostream<ap_uint<512>>& fifo_res_send,
+    // systolic array
+    tapa::ostream<ap_uint<576>>& fifo_x0,
+    tapa::ostream<ap_uint<576>>& fifo_x1,
+    tapa::ostream<ap_uint<576>>& fifo_y0,
+    tapa::ostream<ap_uint<576>>& fifo_y1,
+    tapa::ostream<ap_uint<8>>& fifo_bound_x0,
+    tapa::ostream<ap_uint<8>>& fifo_bound_x1,
+    tapa::istreams<ap_uint<1536>, 4>& fifo_drain
 ){
 
     ap_uint<64> scratchpad_q[MAX_SEQ_LEN][D_head_div_8]; // 8 bit
@@ -339,30 +602,14 @@ void temporal_acc0_slr0(
             for(int j = 0; (j < j_bound) & ((stage != 2) | (j <= i)); j++){
                 #pragma HLS loop_flatten off
 
-                ap_int<22> acc_vec[2][3][16][16];
-                #pragma HLS array_partition variable=acc_vec dim=1 complete
-                #pragma HLS array_partition variable=acc_vec dim=2 complete
-                #pragma HLS array_partition variable=acc_vec dim=3 complete
-                #pragma HLS array_partition variable=acc_vec dim=4 complete
-
-                for(int l = 0; l < 2; l++){
-                    #pragma HLS unroll
-                    for(int ii = 0; ii < 3; ii++){
-                        #pragma HLS unroll
-                        for(int kk = 0; kk < 16; kk++){
-                            #pragma HLS unroll
-                            for(int k = 0; k < 16; k++){
-                                #pragma HLS unroll
-                                acc_vec[l][ii][kk][k] = 0;
-                            }
-                        }
-                    }
-                }
+                fifo_bound_x0.write(ap_uint<8>(k_bound));
+                fifo_bound_x0.write(ap_uint<8>(stage));
+                fifo_bound_x1.write(ap_uint<8>(k_bound));
+                fifo_bound_x1.write(ap_uint<8>(stage));
 
         compute:
                 for(int k = 0; k < k_bound; k++){ // reduction dim
                     #pragma HLS pipeline II=1 style=stp
-                    #pragma HLS dependence variable=acc_vec type=inter distance=2 true
 
                     ap_uint<72> op1_mtx[16];
                     ap_uint<72> op2_mtx[16];
@@ -401,75 +648,48 @@ void temporal_acc0_slr0(
                         fifo_X_out.write(recv_pkt);
                     }
 
-                    for(int kk = 0; kk < 16; kk++){
+                    ap_uint<576> pack_x0; ap_uint<576> pack_x1;
+                    ap_uint<576> pack_y0; ap_uint<576> pack_y1;
+                    for(int ii = 0; ii < 8; ii++){
                         #pragma HLS unroll
-                        for(int l = 0; l < 16; l++){
-                            #pragma HLS unroll
-                            ap_int<22> res0 = acc_vec[k%2][0][kk][l];
-                            ap_int<22> res1 = acc_vec[k%2][1][kk][l];
-                            ap_int<22> res2 = acc_vec[k%2][2][kk][l];
-                            ap_int<8> a0; ap_int<8> a1; ap_int<8> a2;
-                            ap_int<8> b0; ap_int<8> b1; ap_int<8> b2;
-                            ap_int<8> a0_1; ap_int<8> a1_1; ap_int<8> a2_1;
-                            ap_int<8> b0_1; ap_int<8> b1_1; ap_int<8> b2_1;
-                            ap_int<8> a0_2; ap_int<8> a1_2; ap_int<8> a2_2;
-                            ap_int<8> b0_2; ap_int<8> b1_2; ap_int<8> b2_2;
-                            (a2_2, a1_2, a0_2, a2_1, a1_1, a0_1, a2, a1, a0) = op2_mtx[kk];
-                            if(stage==2){
-                                (b2_2, b1_2, b0_2, b2_1, b1_1, b0_1, b2, b1, b0) = op1_mtx[l];
-                            }else{
-                                b0 = ap_int<4>(op1_mtx[l](3, 0));
-                                b1 = ap_int<4>(op1_mtx[l](7, 4));
-                                b2 = ap_int<4>(op1_mtx[l](11, 8));
-                                b0_1 = ap_int<4>(op1_mtx[l](15, 12));
-                                b1_1 = ap_int<4>(op1_mtx[l](19, 16));
-                                b2_1 = ap_int<4>(op1_mtx[l](23, 20));
-                                b0_2 = ap_int<4>(op1_mtx[l](27, 24));
-                                b1_2 = ap_int<4>(op1_mtx[l](31, 28));
-                                b2_2 = ap_int<4>(op1_mtx[l](35, 32));
-                            }
-                            res0 = (((a0 * b0) + (a1 * b1)) + (a2 * b2)) + res0;
-                            res1 = (((a0_1 * b0_1) + (a1_1 * b1_1)) + (a2_1 * b2_1)) + res1;
-                            res2 = (((a0_2 * b0_2) + (a1_2 * b1_2)) + (a2_2 * b2_2)) + res2;
-                            acc_vec[k%2][0][kk][l] = res0;
-                            acc_vec[k%2][1][kk][l] = res1;
-                            acc_vec[k%2][2][kk][l] = res2;
-                        }
+                        pack_x0(ii*72+71, ii*72) = op1_mtx[ii];
+                        pack_y0(ii*72+71, ii*72) = op2_mtx[ii];
+                        pack_x1(ii*72+71, ii*72) = op1_mtx[ii+8];
+                        pack_y1(ii*72+71, ii*72) = op2_mtx[ii+8];
                     }
+                    fifo_x0.write(pack_x0);
+                    fifo_x1.write(pack_x1);
+                    fifo_y0.write(pack_y0);
+                    fifo_y1.write(pack_y1);
                 }
 
                 ap_int<24> acc_final[16][16];
                 #pragma HLS array_partition variable=acc_final dim=1 complete
                 #pragma HLS array_partition variable=acc_final dim=2 complete
 
-                for(int ii = 0; ii < 16; ii++){
+                for(int ii = 0; ii < 2; ii++){
                     #pragma HLS unroll
-                    for(int k = 0; k < 16; k++){
+                    for(int jj = 0; jj < 2; jj++){
                         #pragma HLS unroll
-                        acc_final[ii][k] = -(k_bound << 2);
-                    }
-                }
-
-        reduction:
-                for(int k = 0; k < 2; k++){
-                    for(int ii = 0; ii < 3; ii++){
-                        for(int kk = 0; kk < 16; kk++){
+                        auto pack = fifo_drain[ii*2+jj].read();
+                        for(int k = 0; k < 8; k++){
                             #pragma HLS unroll
-                            for(int l = 0; l < 16; l++){
+                            for(int l = 0; l < 8; l++){
                                 #pragma HLS unroll
-                                acc_final[kk][l] += acc_vec[k][ii][kk][l];
+                                acc_final[ii*8+k][jj*8+l] = ap_int<24>(pack(k*192+l*24+23, k*192+l*24));
                             }
                         }
                     }
                 }
 
-               if(stage == 0){
+
+                if(stage == 0){
                     for(int ii = 0; ii < 16; ii++){
                         #pragma HLS unroll
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
                             int offset = k%8;
-                            scratchpad_q[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 5);
+                            scratchpad_q[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 8);
                         }
                     }
                 } else if (stage == 1){
@@ -483,7 +703,7 @@ void temporal_acc0_slr0(
                                 ap_uint<64> tmp_pack;
                                 for(int k = 0; k < 8; k++){
                                     #pragma HLS unroll
-                                    tmp_pack(k*8+7, k*8) = ap_int<8>(acc_final[ii*4+l][jj*8+k] >> 5);
+                                    tmp_pack(k*8+7, k*8) = ap_int<8>(acc_final[ii*4+l][jj*8+k] >> 8);
                                 }
                                 scratchpad_k[i*16+ii*4+l][j*4+jj*2] = tmp_pack;
                             }
@@ -517,7 +737,7 @@ void temporal_acc0_slr0(
                         ap_uint<512> tmp_send;
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
-                            ap_int<32> tmp = acc_final[ii][k] + ap_int<22>(tmp_recv(k*32+21, k*32));
+                            ap_int<32> tmp = acc_final[ii][k] + ap_int<24>(tmp_recv(k*32+23, k*32));
                             tmp += ap_int<8>(X[i*16+ii][j*2+k/8]((k%8)*8+7, (k%8)*8));
                             tmp_send(k*32+31, k*32) = tmp;
                         }
@@ -551,7 +771,15 @@ void temporal_acc0(
     tapa::istream<ap_uint<1024>>& fifo_context,
     tapa::ostream<ap_uint<512>>& fifo_ffn_out,
     tapa::istream<ap_uint<512>>& fifo_reduce_recv,
-    tapa::ostream<ap_uint<512>>& fifo_reduce_send
+    tapa::ostream<ap_uint<512>>& fifo_reduce_send,
+    // systolic array
+    tapa::ostream<ap_uint<576>>& fifo_x0,
+    tapa::ostream<ap_uint<576>>& fifo_x1,
+    tapa::ostream<ap_uint<576>>& fifo_y0,
+    tapa::ostream<ap_uint<576>>& fifo_y1,
+    tapa::ostream<ap_uint<8>>& fifo_bound_x0,
+    tapa::ostream<ap_uint<8>>& fifo_bound_x1,
+    tapa::istreams<ap_uint<1536>, 4>& fifo_drain
 ){
 
     ap_uint<64> scratchpad_q[MAX_SEQ_LEN][D_head_div_8]; // 8 bit
@@ -617,30 +845,14 @@ void temporal_acc0(
             for(int j = 0; (j < j_bound) & ((stage != 2) | (j <= i)); j++){
                 #pragma HLS loop_flatten off
 
-                ap_int<22> acc_vec[2][3][16][16];
-                #pragma HLS array_partition variable=acc_vec dim=1 complete
-                #pragma HLS array_partition variable=acc_vec dim=2 complete
-                #pragma HLS array_partition variable=acc_vec dim=3 complete
-                #pragma HLS array_partition variable=acc_vec dim=4 complete
-
-                for(int l = 0; l < 2; l++){
-                    #pragma HLS unroll
-                    for(int ii = 0; ii < 3; ii++){
-                        #pragma HLS unroll
-                        for(int kk = 0; kk < 16; kk++){
-                            #pragma HLS unroll
-                            for(int k = 0; k < 16; k++){
-                                #pragma HLS unroll
-                                acc_vec[l][ii][kk][k] = 0;
-                            }
-                        }
-                    }
-                }
+                fifo_bound_x0.write(ap_uint<8>(k_bound));
+                fifo_bound_x0.write(ap_uint<8>(stage));
+                fifo_bound_x1.write(ap_uint<8>(k_bound));
+                fifo_bound_x1.write(ap_uint<8>(stage));
 
         compute:
                 for(int k = 0; k < k_bound; k++){ // reduction dim
                     #pragma HLS pipeline II=1 style=stp
-                    #pragma HLS dependence variable=acc_vec type=inter distance=2 true
 
                     ap_uint<72> op1_mtx[16];
                     ap_uint<72> op2_mtx[16];
@@ -669,63 +881,36 @@ void temporal_acc0(
                         }
                     }
 
-                    for(int kk = 0; kk < 16; kk++){
+                    ap_uint<576> pack_x0; ap_uint<576> pack_x1;
+                    ap_uint<576> pack_y0; ap_uint<576> pack_y1;
+                    for(int ii = 0; ii < 8; ii++){
                         #pragma HLS unroll
-                        for(int l = 0; l < 16; l++){
-                            #pragma HLS unroll
-                            ap_int<22> res0 = acc_vec[k%2][0][kk][l];
-                            ap_int<22> res1 = acc_vec[k%2][1][kk][l];
-                            ap_int<22> res2 = acc_vec[k%2][2][kk][l];
-                            ap_int<8> a0; ap_int<8> a1; ap_int<8> a2;
-                            ap_int<8> b0; ap_int<8> b1; ap_int<8> b2;
-                            ap_int<8> a0_1; ap_int<8> a1_1; ap_int<8> a2_1;
-                            ap_int<8> b0_1; ap_int<8> b1_1; ap_int<8> b2_1;
-                            ap_int<8> a0_2; ap_int<8> a1_2; ap_int<8> a2_2;
-                            ap_int<8> b0_2; ap_int<8> b1_2; ap_int<8> b2_2;
-                            (a2_2, a1_2, a0_2, a2_1, a1_1, a0_1, a2, a1, a0) = op2_mtx[kk];
-                            if(stage==2){
-                                (b2_2, b1_2, b0_2, b2_1, b1_1, b0_1, b2, b1, b0) = op1_mtx[l];
-                            }else{
-                                b0 = ap_int<4>(op1_mtx[l](3, 0));
-                                b1 = ap_int<4>(op1_mtx[l](7, 4));
-                                b2 = ap_int<4>(op1_mtx[l](11, 8));
-                                b0_1 = ap_int<4>(op1_mtx[l](15, 12));
-                                b1_1 = ap_int<4>(op1_mtx[l](19, 16));
-                                b2_1 = ap_int<4>(op1_mtx[l](23, 20));
-                                b0_2 = ap_int<4>(op1_mtx[l](27, 24));
-                                b1_2 = ap_int<4>(op1_mtx[l](31, 28));
-                                b2_2 = ap_int<4>(op1_mtx[l](35, 32));
-                            }
-                            res0 = (((a0 * b0) + (a1 * b1)) + (a2 * b2)) + res0;
-                            res1 = (((a0_1 * b0_1) + (a1_1 * b1_1)) + (a2_1 * b2_1)) + res1;
-                            res2 = (((a0_2 * b0_2) + (a1_2 * b1_2)) + (a2_2 * b2_2)) + res2;
-                            acc_vec[k%2][0][kk][l] = res0;
-                            acc_vec[k%2][1][kk][l] = res1;
-                            acc_vec[k%2][2][kk][l] = res2;
-                        }
+                        pack_x0(ii*72+71, ii*72) = op1_mtx[ii];
+                        pack_y0(ii*72+71, ii*72) = op2_mtx[ii];
+                        pack_x1(ii*72+71, ii*72) = op1_mtx[ii+8];
+                        pack_y1(ii*72+71, ii*72) = op2_mtx[ii+8];
                     }
+                    fifo_x0.write(pack_x0);
+                    fifo_x1.write(pack_x1);
+                    fifo_y0.write(pack_y0);
+                    fifo_y1.write(pack_y1);
                 }
 
                 ap_int<24> acc_final[16][16];
                 #pragma HLS array_partition variable=acc_final dim=1 complete
                 #pragma HLS array_partition variable=acc_final dim=2 complete
 
-                for(int ii = 0; ii < 16; ii++){
+                // read 2x8 data
+                for(int ii = 0; ii < 2; ii++){
                     #pragma HLS unroll
-                    for(int k = 0; k < 16; k++){
+                    for(int jj = 0; jj < 2; jj++){
                         #pragma HLS unroll
-                        acc_final[ii][k] = -(k_bound << 2);
-                    }
-                }
-
-        reduction:
-                for(int k = 0; k < 2; k++){
-                    for(int ii = 0; ii < 3; ii++){
-                        for(int kk = 0; kk < 16; kk++){
+                        auto pack = fifo_drain[ii*2+jj].read();
+                        for(int k = 0; k < 8; k++){
                             #pragma HLS unroll
-                            for(int l = 0; l < 16; l++){
+                            for(int l = 0; l < 8; l++){
                                 #pragma HLS unroll
-                                acc_final[kk][l] += acc_vec[k][ii][kk][l];
+                                acc_final[ii*8+k][jj*8+l] = ap_int<24>(pack(k*192+l*24+23, k*192+l*24));
                             }
                         }
                     }
@@ -737,7 +922,7 @@ void temporal_acc0(
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
                             int offset = k%8;
-                            scratchpad_q[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 5);
+                            scratchpad_q[i*16+ii][j*2+k/8](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 8);
                         }
                     }
                 } else if (stage == 1){
@@ -751,7 +936,7 @@ void temporal_acc0(
                                 ap_uint<64> tmp_pack;
                                 for(int k = 0; k < 8; k++){
                                     #pragma HLS unroll
-                                    tmp_pack(k*8+7, k*8) = ap_int<8>(acc_final[ii*4+l][jj*8+k] >> 5);
+                                    tmp_pack(k*8+7, k*8) = ap_int<8>(acc_final[ii*4+l][jj*8+k] >> 8);
                                 }
                                 scratchpad_k[i*16+ii*4+l][j*4+jj*2] = tmp_pack;
                             }
@@ -811,9 +996,15 @@ void temporal_acc1_slr0(
     tapa::istream<ap_uint<512>>& fifo_reduce_recv,
     tapa::ostream<ap_uint<512>>& fifo_res_send,
     tapa::istream<ap_uint<1024>>& fifo_gelu_in,
-    tapa::ostream<ap_uint<512>>& fifo_ffn_out
-    // tapa::ostream<ap_uint<64>>& fifo_write,
-    // tapa::ostream<bool>& fifo_fin
+    tapa::ostream<ap_uint<512>>& fifo_ffn_out,
+    // systolic array
+    tapa::ostream<ap_uint<576>>& fifo_x0,
+    tapa::ostream<ap_uint<576>>& fifo_x1,
+    tapa::ostream<ap_uint<576>>& fifo_y0,
+    tapa::ostream<ap_uint<576>>& fifo_y1,
+    tapa::ostream<ap_uint<8>>& fifo_bound_x0,
+    tapa::ostream<ap_uint<8>>& fifo_bound_x1,
+    tapa::istreams<ap_uint<1728>, 4>& fifo_drain    
 ){
     ap_uint<64> X[MAX_SEQ_LEN][D_div_8]; // 8 bit
     #pragma HLS array_partition variable=X cyclic dim=1 factor=16
@@ -920,30 +1111,14 @@ void temporal_acc1_slr0(
             for(int j = 0; j < j_bound; j++){
                 #pragma HLS loop_flatten off
 
-                ap_int<22> acc_vec[2][3][16][16];
-                #pragma HLS array_partition variable=acc_vec dim=1 complete
-                #pragma HLS array_partition variable=acc_vec dim=2 complete
-                #pragma HLS array_partition variable=acc_vec dim=3 complete
-                #pragma HLS array_partition variable=acc_vec dim=4 complete
-
-                for(int l = 0; l < 2; l++){
-                    #pragma HLS unroll
-                    for(int ii = 0; ii < 3; ii++){
-                        #pragma HLS unroll
-                        for(int kk = 0; kk < 16; kk++){
-                            #pragma HLS unroll
-                            for(int k = 0; k < 16; k++){
-                                #pragma HLS unroll
-                                acc_vec[l][ii][kk][k] = 0;
-                            }
-                        }
-                    }
-                }
+                fifo_bound_x0.write(ap_uint<8>(k_bound));
+                fifo_bound_x0.write(ap_uint<8>(stage));
+                fifo_bound_x1.write(ap_uint<8>(k_bound));
+                fifo_bound_x1.write(ap_uint<8>(stage));
 
         compute:
                 for(int k = 0; k < k_bound; k++){
                     #pragma HLS pipeline II=1 style=stp
-                    #pragma HLS dependence variable=acc_vec type=inter distance=2 true
 
                     ap_uint<72> op1_mtx[16];
                     ap_uint<72> op2_mtx[16];
@@ -980,63 +1155,35 @@ void temporal_acc1_slr0(
                         fifo_X_out.write(send_pkt);
                     }
 
-                    for(int kk = 0; kk < 16; kk++){
+                    ap_uint<576> pack_x0; ap_uint<576> pack_x1;
+                    ap_uint<576> pack_y0; ap_uint<576> pack_y1;
+                    for(int ii = 0; ii < 8; ii++){
                         #pragma HLS unroll
-                        for(int l = 0; l < 16; l++){
-                            #pragma HLS unroll
-                            ap_int<22> res0 = acc_vec[k%2][0][kk][l];
-                            ap_int<22> res1 = acc_vec[k%2][1][kk][l];
-                            ap_int<22> res2 = acc_vec[k%2][2][kk][l];
-                            ap_int<8> a0; ap_int<8> a1; ap_int<8> a2;
-                            ap_int<8> b0; ap_int<8> b1; ap_int<8> b2;
-                            ap_int<8> a0_1; ap_int<8> a1_1; ap_int<8> a2_1;
-                            ap_int<8> b0_1; ap_int<8> b1_1; ap_int<8> b2_1;
-                            ap_int<8> a0_2; ap_int<8> a1_2; ap_int<8> a2_2;
-                            ap_int<8> b0_2; ap_int<8> b1_2; ap_int<8> b2_2;
-                            (a2_2, a1_2, a0_2, a2_1, a1_1, a0_1, a2, a1, a0) = op2_mtx[kk];
-                            if(stage==2){
-                                (b2_2, b1_2, b0_2, b2_1, b1_1, b0_1, b2, b1, b0) = op1_mtx[l];
-                            }else{
-                                b0 = ap_int<4>(op1_mtx[l](3, 0));
-                                b1 = ap_int<4>(op1_mtx[l](7, 4));
-                                b2 = ap_int<4>(op1_mtx[l](11, 8));
-                                b0_1 = ap_int<4>(op1_mtx[l](15, 12));
-                                b1_1 = ap_int<4>(op1_mtx[l](19, 16));
-                                b2_1 = ap_int<4>(op1_mtx[l](23, 20));
-                                b0_2 = ap_int<4>(op1_mtx[l](27, 24));
-                                b1_2 = ap_int<4>(op1_mtx[l](31, 28));
-                                b2_2 = ap_int<4>(op1_mtx[l](35, 32));
-                            }
-                            res0 = (((a0 * b0) + (a1 * b1)) + (a2 * b2)) + res0;
-                            res1 = (((a0_1 * b0_1) + (a1_1 * b1_1)) + (a2_1 * b2_1)) + res1;
-                            res2 = (((a0_2 * b0_2) + (a1_2 * b1_2)) + (a2_2 * b2_2)) + res2;
-                            acc_vec[k%2][0][kk][l] = res0;
-                            acc_vec[k%2][1][kk][l] = res1;
-                            acc_vec[k%2][2][kk][l] = res2;
-                        }
+                        pack_x0(ii*72+71, ii*72) = op1_mtx[ii];
+                        pack_y0(ii*72+71, ii*72) = op2_mtx[ii];
+                        pack_x1(ii*72+71, ii*72) = op1_mtx[ii+8];
+                        pack_y1(ii*72+71, ii*72) = op2_mtx[ii+8];
                     }
+                    fifo_x0.write(pack_x0);
+                    fifo_x1.write(pack_x1);
+                    fifo_y0.write(pack_y0);
+                    fifo_y1.write(pack_y1);
                 }
 
-                ap_int<24> acc_final[16][16];
+                ap_int<27> acc_final[16][16];
                 #pragma HLS array_partition variable=acc_final dim=1 complete
                 #pragma HLS array_partition variable=acc_final dim=2 complete
 
-                for(int ii = 0; ii < 16; ii++){
+                for(int ii = 0; ii < 2; ii++){
                     #pragma HLS unroll
-                    for(int k = 0; k < 16; k++){
+                    for(int jj = 0; jj < 2; jj++){
                         #pragma HLS unroll
-                        acc_final[ii][k] = -(k_bound << 2);
-                    }
-                }
-
-        reduction:
-                for(int k = 0; k < 2; k++){
-                    for(int ii = 0; ii < 3; ii++){
-                        for(int kk = 0; kk < 16; kk++){
+                        auto pack = fifo_drain[ii*2+jj].read();
+                        for(int k = 0; k < 8; k++){
                             #pragma HLS unroll
-                            for(int l = 0; l < 16; l++){
+                            for(int l = 0; l < 8; l++){
                                 #pragma HLS unroll
-                                acc_final[kk][l] += acc_vec[k][ii][kk][l];
+                                acc_final[ii*8+k][jj*8+l] = ap_int<27>(pack(k*216+l*27+26, k*216+l*27));
                             }
                         }
                     }
@@ -1048,7 +1195,7 @@ void temporal_acc1_slr0(
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
                             int offset = ii%8;
-                            scratchpad[i*2+ii/8][j*16+k](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 5); 
+                            scratchpad[i*2+ii/8][j*16+k](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 8); 
                         }
                     }
                 } else if (stage == 2){
@@ -1059,7 +1206,7 @@ void temporal_acc1_slr0(
                             #pragma HLS unroll
                             for(int k = 0; k < 16; k++){
                                 #pragma HLS unroll
-                                tmp((jj*16+k)*8+7, (jj*16+k)*8) = ap_int<8>(acc_final[ii*8+jj][k] >> 5);
+                                tmp((jj*16+k)*8+7, (jj*16+k)*8) = ap_int<8>(acc_final[ii*8+jj][k] >> 12);
                             }
                         }
                         fifo_O_out.write(tmp);
@@ -1070,7 +1217,7 @@ void temporal_acc1_slr0(
                             ap_uint<256> tmp;
                             for(int k = 0; k < 32; k++){
                                 #pragma HLS unroll
-                                tmp(k*8+7, k*8) = ap_int<8>(acc_final[ii*4+k/8][jj*8+k%8] >> 5);
+                                tmp(k*8+7, k*8) = ap_int<8>(acc_final[ii*4+k/8][jj*8+k%8] >> 8);
                             }
                             fifo_to_acc0.write(tmp);
                         }
@@ -1160,7 +1307,15 @@ void temporal_acc1(
     tapa::istream<ap_uint<1024>>& fifo_context,
     tapa::istream<ap_uint<512>>& fifo_reduce_recv,
     tapa::ostream<ap_uint<512>>& fifo_reduce_send,
-    tapa::istream<ap_uint<1024>>& fifo_gelu_in
+    tapa::istream<ap_uint<1024>>& fifo_gelu_in,
+    // systolic array
+    tapa::ostream<ap_uint<576>>& fifo_x0,
+    tapa::ostream<ap_uint<576>>& fifo_x1,
+    tapa::ostream<ap_uint<576>>& fifo_y0,
+    tapa::ostream<ap_uint<576>>& fifo_y1,
+    tapa::ostream<ap_uint<8>>& fifo_bound_x0,
+    tapa::ostream<ap_uint<8>>& fifo_bound_x1,
+    tapa::istreams<ap_uint<1728>, 4>& fifo_drain 
 ){
 
     ap_uint<64> scratchpad[MAX_SEQ_LEN_div_8][D_head]; // 8 bit
@@ -1249,29 +1404,14 @@ void temporal_acc1(
             for(int j = 0; j < j_bound; j++){
                 #pragma HLS loop_flatten off
 
-                ap_int<22> acc_vec[2][3][16][16];
-                #pragma HLS array_partition variable=acc_vec dim=1 complete
-                #pragma HLS array_partition variable=acc_vec dim=2 complete
-                #pragma HLS array_partition variable=acc_vec dim=3 complete
-                #pragma HLS array_partition variable=acc_vec dim=4 complete
+                fifo_bound_x0.write(ap_uint<8>(k_bound));
+                fifo_bound_x0.write(ap_uint<8>(stage));
+                fifo_bound_x1.write(ap_uint<8>(k_bound));
+                fifo_bound_x1.write(ap_uint<8>(stage));
 
-                for(int l = 0; l < 2; l++){
-                    #pragma HLS unroll
-                    for(int ii = 0; ii < 3; ii++){
-                        #pragma HLS unroll
-                        for(int kk = 0; kk < 16; kk++){
-                            #pragma HLS unroll
-                            for(int k = 0; k < 16; k++){
-                                #pragma HLS unroll
-                                acc_vec[l][ii][kk][k] = 0;
-                            }
-                        }
-                    }
-                }
         compute:
                 for(int k = 0; k < k_bound; k++){
                     #pragma HLS pipeline II=1 style=stp
-                    #pragma HLS dependence variable=acc_vec type=inter distance=2 true
 
                     ap_uint<72> op1_mtx[16];
                     ap_uint<72> op2_mtx[16];
@@ -1300,63 +1440,35 @@ void temporal_acc1(
                         }
                     }
                     
-                    for(int kk = 0; kk < 16; kk++){
+                    ap_uint<576> pack_x0; ap_uint<576> pack_x1;
+                    ap_uint<576> pack_y0; ap_uint<576> pack_y1;
+                    for(int ii = 0; ii < 8; ii++){
                         #pragma HLS unroll
-                        for(int l = 0; l < 16; l++){
-                            #pragma HLS unroll
-                            ap_int<22> res0 = acc_vec[k%2][0][kk][l];
-                            ap_int<22> res1 = acc_vec[k%2][1][kk][l];
-                            ap_int<22> res2 = acc_vec[k%2][2][kk][l];
-                            ap_int<8> a0; ap_int<8> a1; ap_int<8> a2;
-                            ap_int<8> b0; ap_int<8> b1; ap_int<8> b2;
-                            ap_int<8> a0_1; ap_int<8> a1_1; ap_int<8> a2_1;
-                            ap_int<8> b0_1; ap_int<8> b1_1; ap_int<8> b2_1;
-                            ap_int<8> a0_2; ap_int<8> a1_2; ap_int<8> a2_2;
-                            ap_int<8> b0_2; ap_int<8> b1_2; ap_int<8> b2_2;
-                            (a2_2, a1_2, a0_2, a2_1, a1_1, a0_1, a2, a1, a0) = op2_mtx[kk];
-                            if(stage==2){
-                                (b2_2, b1_2, b0_2, b2_1, b1_1, b0_1, b2, b1, b0) = op1_mtx[l];
-                            }else{
-                                b0 = ap_int<4>(op1_mtx[l](3, 0));
-                                b1 = ap_int<4>(op1_mtx[l](7, 4));
-                                b2 = ap_int<4>(op1_mtx[l](11, 8));
-                                b0_1 = ap_int<4>(op1_mtx[l](15, 12));
-                                b1_1 = ap_int<4>(op1_mtx[l](19, 16));
-                                b2_1 = ap_int<4>(op1_mtx[l](23, 20));
-                                b0_2 = ap_int<4>(op1_mtx[l](27, 24));
-                                b1_2 = ap_int<4>(op1_mtx[l](31, 28));
-                                b2_2 = ap_int<4>(op1_mtx[l](35, 32));
-                            }
-                            res0 = (((a0 * b0) + (a1 * b1)) + (a2 * b2)) + res0;
-                            res1 = (((a0_1 * b0_1) + (a1_1 * b1_1)) + (a2_1 * b2_1)) + res1;
-                            res2 = (((a0_2 * b0_2) + (a1_2 * b1_2)) + (a2_2 * b2_2)) + res2;
-                            acc_vec[k%2][0][kk][l] = res0;
-                            acc_vec[k%2][1][kk][l] = res1;
-                            acc_vec[k%2][2][kk][l] = res2;
-                        }
+                        pack_x0(ii*72+71, ii*72) = op1_mtx[ii];
+                        pack_y0(ii*72+71, ii*72) = op2_mtx[ii];
+                        pack_x1(ii*72+71, ii*72) = op1_mtx[ii+8];
+                        pack_y1(ii*72+71, ii*72) = op2_mtx[ii+8];
                     }
+                    fifo_x0.write(pack_x0);
+                    fifo_x1.write(pack_x1);
+                    fifo_y0.write(pack_y0);
+                    fifo_y1.write(pack_y1);
                 }
 
-                ap_int<24> acc_final[16][16];
+                ap_int<27> acc_final[16][16];
                 #pragma HLS array_partition variable=acc_final dim=1 complete
                 #pragma HLS array_partition variable=acc_final dim=2 complete
 
-                for(int ii = 0; ii < 16; ii++){
+                for(int ii = 0; ii < 2; ii++){
                     #pragma HLS unroll
-                    for(int k = 0; k < 16; k++){
+                    for(int jj = 0; jj < 2; jj++){
                         #pragma HLS unroll
-                        acc_final[ii][k] = -(k_bound << 2);
-                    }
-                }
-
-        reduction:
-                for(int k = 0; k < 2; k++){
-                    for(int ii = 0; ii < 3; ii++){
-                        for(int kk = 0; kk < 16; kk++){
+                        auto pack = fifo_drain[ii*2+jj].read();
+                        for(int k = 0; k < 8; k++){
                             #pragma HLS unroll
-                            for(int l = 0; l < 16; l++){
+                            for(int l = 0; l < 8; l++){
                                 #pragma HLS unroll
-                                acc_final[kk][l] += acc_vec[k][ii][kk][l];
+                                acc_final[ii*8+k][jj*8+l] = ap_int<27>(pack(k*216+l*27+26, k*216+l*27));
                             }
                         }
                     }
@@ -1379,7 +1491,7 @@ void temporal_acc1(
                             #pragma HLS unroll
                             for(int k = 0; k < 16; k++){
                                 #pragma HLS unroll
-                                tmp((jj*16+k)*8+7, (jj*16+k)*8) = ap_int<8>(acc_final[ii*8+jj][k] >> 5);
+                                tmp((jj*16+k)*8+7, (jj*16+k)*8) = ap_int<8>(acc_final[ii*8+jj][k] >> 12);
                             }
                         }
                         fifo_O_out.write(tmp);
@@ -1390,7 +1502,7 @@ void temporal_acc1(
                             ap_uint<256> tmp;
                             for(int k = 0; k < 32; k++){
                                 #pragma HLS unroll
-                                tmp(k*8+7, k*8) = ap_int<8>(acc_final[ii*4+k/8][jj*8+k%8] >> 5);
+                                tmp(k*8+7, k*8) = ap_int<8>(acc_final[ii*4+k/8][jj*8+k%8] >> 8);
                             }
                             fifo_to_acc0.write(tmp);
                         }
@@ -1969,8 +2081,8 @@ void opt_kernel(
     tapa::streams<ConfigInst, NUM_SLR+1, 4> fifo_inst_acc1("fifo_inst_acc1");
     tapa::stream<ap_uint<512>, 16> fifo_X_acc0_slr0("fifo_X_acc0_slr0");
     tapa::stream<ap_uint<512>, 16> fifo_X_acc1_slr0("fifo_X_acc1_slr0");
-    tapa::streams<ap_uint<1024>, NUM_SLR, 4> fifo_X_acc0("fifo_X_acc0");
-    tapa::streams<ap_uint<1024>, NUM_SLR, 4> fifo_X_acc1("fifo_X_acc1");
+    tapa::streams<ap_uint<1024>, NUM_SLR, 16> fifo_X_acc0("fifo_X_acc0");
+    tapa::streams<ap_uint<1024>, NUM_SLR, 16> fifo_X_acc1("fifo_X_acc1");
     tapa::streams<ap_uint<512>, NUM_SLR+1, 8> fifo_W_acc0("fifo_W_acc0");
     tapa::streams<ap_uint<512>, NUM_SLR+1, 8> fifo_W_acc1("fifo_W_acc1");
     // tapa::streams<ap_uint<512>, NUM_SLR, 4> fifo_acc0_out("fifo_acc0_out");
@@ -1983,8 +2095,8 @@ void opt_kernel(
     tapa::stream<bool> fifo_fin("fifo_fin");
 
     tapa::streams<ap_uint<1024>, NUM_SLR> fifo_context("fifo_context");
-    tapa::streams<ap_uint<1024>, NUM_SLR> fifo_cont_to_acc0("fifo_cont_to_acc0");
-    tapa::streams<ap_uint<1024>, NUM_SLR> fifo_cont_to_acc1("fifo_cont_to_acc1");
+    tapa::streams<ap_uint<1024>, NUM_SLR, 16> fifo_cont_to_acc0("fifo_cont_to_acc0");
+    tapa::streams<ap_uint<1024>, NUM_SLR, 16> fifo_cont_to_acc1("fifo_cont_to_acc1");
     tapa::streams<ap_uint<512>, NUM_SLR> fifo_reduce_acc0("fifo_reduce_acc0");
     tapa::streams<ap_uint<512>, NUM_SLR> fifo_reduce_acc1("fifo_reduce_acc1");
 
@@ -1997,11 +2109,11 @@ void opt_kernel(
     tapa::stream<ap_uint<512>, D> fifo_ln_acc1("fifo_ln_acc1");
 
     tapa::stream<ap_uint<128>> fifo_ffn_buffer_in("fifo_ffn_buffer_in");
-    tapa::stream<ap_uint<1024>> fifo_ffn_buffer_out("fifo_ffn_buffer_out");
+    tapa::stream<ap_uint<1024>, 16> fifo_ffn_buffer_out("fifo_ffn_buffer_out");
 
     tapa::streams<ap_uint<512>, NUM_SLR, 16> fifo_gelu_in("fifo_gelu_in");
     tapa::streams<ap_uint<128>, NUM_SLR, D> fifo_gelu_out("fifo_gelu_out");
-    tapa::streams<ap_uint<1024>, NUM_SLR> fifo_gelu_full("fifo_gelu_full");
+    tapa::streams<ap_uint<1024>, NUM_SLR, 16> fifo_gelu_full("fifo_gelu_full");
 
     tapa::stream<ap_uint<512>, 8> fifo_ffn2("fifo_ffn2");
     tapa::stream<ap_uint<1024>, D_div_8+2> fifo_skip_x("fifo_skip_x");
@@ -2015,6 +2127,16 @@ void opt_kernel(
     tapa::streams<int, NUM_SLR*2> fifo_inst_sfu_buffer("fifo_inst_sfu_buffer");
     tapa::streams<int, NUM_SLR> fifo_inst_data_pack("fifo_inst_data_pack");
     tapa::streams<int, NUM_SLR> fifo_inst_norm("fifo_inst_norm");
+
+    // systolic array 2x2
+    tapa::streams<ap_uint<576>, 6*NUM_SLR> fifo_x0("fifo_x0");
+    tapa::streams<ap_uint<576>, 6*NUM_SLR> fifo_x1("fifo_x1");
+    tapa::streams<ap_uint<576>, 6*NUM_SLR> fifo_y0("fifo_y0");
+    tapa::streams<ap_uint<576>, 6*NUM_SLR> fifo_y1("fifo_y1");
+    tapa::streams<ap_uint<8>, 6*NUM_SLR> fifo_bound_x0("fifo_bound_x0");
+    tapa::streams<ap_uint<8>, 6*NUM_SLR> fifo_bound_x1("fifo_bound_x1");
+    tapa::streams<ap_uint<1536>, 4*NUM_SLR> fifo_drain_acc0("fifo_drain_acc0");
+    tapa::streams<ap_uint<1728>, 4*NUM_SLR> fifo_drain_acc1("fifo_drain_acc1");
 
     tapa::task()
         .invoke<tapa::join>(read_inst, seq_len, fifo_inst_acc0, fifo_inst_acc1)
@@ -2034,9 +2156,60 @@ void opt_kernel(
             fifo_cont_to_acc0,
             fifo_ffn_buffer_out,
             fifo_reduce_acc0,
-            fifo_res_acc0
-            // fifo_fin
+            fifo_res_acc0,
+            fifo_x0, fifo_x1,
+            fifo_y0, fifo_y1,
+            fifo_bound_x0, fifo_bound_x1,
+            fifo_drain_acc0
         )
+        // Systolic array 2x2
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 0, 0,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 0, 1,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 1, 0,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 1, 1,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x1
+        )
+        // end systolic array
         .invoke<tapa::join>(
             temporal_acc1_slr0,
             fifo_inst_acc1, fifo_inst_acc1,
@@ -2050,9 +2223,60 @@ void opt_kernel(
             fifo_reduce_acc1,
             fifo_res_acc1,
             fifo_gelu_full,
-            fifo_ffn2
-            // fifo_fin
+            fifo_ffn2,
+            fifo_x0, fifo_x1,
+            fifo_y0, fifo_y1,
+            fifo_bound_x0, fifo_bound_x1,
+            fifo_drain_acc1
         )
+        // Systolic array 2x2
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 0, 0,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 0, 1,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 1, 0,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 1, 1,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x1
+        )
+        // end systolic array
         .invoke<tapa::join>(
             residual, seq_len,
             fifo_res_acc0,
@@ -2063,7 +2287,7 @@ void opt_kernel(
             fifo_res_acc1,
             fifo_ln_acc1
         )
-        .invoke<tapa::join, NUM_SLR-1>(
+        .invoke<tapa::join>(
             temporal_acc0,
             fifo_inst_acc0, fifo_inst_acc0,
             fifo_inst_switch_acc0,
@@ -2073,9 +2297,187 @@ void opt_kernel(
             fifo_acc0_to_sfu,
             fifo_cont_to_acc0,
             fifo_gelu_in,
-            fifo_reduce_acc0, fifo_reduce_acc0
+            fifo_reduce_acc0, fifo_reduce_acc0,
+            fifo_x0, fifo_x1,
+            fifo_y0, fifo_y1,
+            fifo_bound_x0, fifo_bound_x1,
+            fifo_drain_acc0
         )
-        .invoke<tapa::join, NUM_SLR-1>(
+        // Systolic array 2x2
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 0, 0,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 0, 1,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 1, 0,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 1, 1,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x1
+        )
+        .invoke<tapa::join>(
+            temporal_acc0,
+            fifo_inst_acc0, fifo_inst_acc0,
+            fifo_inst_switch_acc0,
+            fifo_X_acc0, fifo_X_acc0,
+            fifo_W_acc0, fifo_W_acc0,
+            fifo_from_acc1_to_acc0,
+            fifo_acc0_to_sfu,
+            fifo_cont_to_acc0,
+            fifo_gelu_in,
+            fifo_reduce_acc0, fifo_reduce_acc0,
+            fifo_x0, fifo_x1,
+            fifo_y0, fifo_y1,
+            fifo_bound_x0, fifo_bound_x1,
+            fifo_drain_acc0
+        )
+        // Systolic array 2x2
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 0, 0,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 0, 1,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 1, 0,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 1, 1,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x1
+        )
+        .invoke<tapa::join>(
+            temporal_acc0,
+            fifo_inst_acc0, fifo_inst_acc0,
+            fifo_inst_switch_acc0,
+            fifo_X_acc0, fifo_X_acc0,
+            fifo_W_acc0, fifo_W_acc0,
+            fifo_from_acc1_to_acc0,
+            fifo_acc0_to_sfu,
+            fifo_cont_to_acc0,
+            fifo_gelu_in,
+            fifo_reduce_acc0, fifo_reduce_acc0,
+            fifo_x0, fifo_x1,
+            fifo_y0, fifo_y1,
+            fifo_bound_x0, fifo_bound_x1,
+            fifo_drain_acc0
+        )
+        // Systolic array 2x2
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 0, 0,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 0, 1,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 1, 0,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc0, 1, 1,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x1
+        )
+        // end systolic array
+        .invoke<tapa::join>(
             temporal_acc1,
             fifo_inst_acc1, fifo_inst_acc1,
             fifo_inst_switch_acc1,
@@ -2086,8 +2488,188 @@ void opt_kernel(
             fifo_context,
             fifo_cont_to_acc1,
             fifo_reduce_acc1, fifo_reduce_acc1,
-            fifo_gelu_full
+            fifo_gelu_full,
+            fifo_x0, fifo_x1,
+            fifo_y0, fifo_y1,
+            fifo_bound_x0, fifo_bound_x1,
+            fifo_drain_acc1
         )
+        // Systolic array 2x2
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 0, 0,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 0, 1,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 1, 0,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 1, 1,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x1
+        )
+        .invoke<tapa::join>(
+            temporal_acc1,
+            fifo_inst_acc1, fifo_inst_acc1,
+            fifo_inst_switch_acc1,
+            fifo_X_acc1, fifo_X_acc1,
+            fifo_W_acc1, fifo_W_acc1,
+            fifo_from_acc1_to_acc0,
+            fifo_from_sfu_to_acc1,
+            fifo_context,
+            fifo_cont_to_acc1,
+            fifo_reduce_acc1, fifo_reduce_acc1,
+            fifo_gelu_full,
+            fifo_x0, fifo_x1,
+            fifo_y0, fifo_y1,
+            fifo_bound_x0, fifo_bound_x1,
+            fifo_drain_acc1
+        )
+        // Systolic array 2x2
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 0, 0,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 0, 1,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 1, 0,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 1, 1,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x1
+        )
+        .invoke<tapa::join>(
+            temporal_acc1,
+            fifo_inst_acc1, fifo_inst_acc1,
+            fifo_inst_switch_acc1,
+            fifo_X_acc1, fifo_X_acc1,
+            fifo_W_acc1, fifo_W_acc1,
+            fifo_from_acc1_to_acc0,
+            fifo_from_sfu_to_acc1,
+            fifo_context,
+            fifo_cont_to_acc1,
+            fifo_reduce_acc1, fifo_reduce_acc1,
+            fifo_gelu_full,
+            fifo_x0, fifo_x1,
+            fifo_y0, fifo_y1,
+            fifo_bound_x0, fifo_bound_x1,
+            fifo_drain_acc1
+        )
+        // Systolic array 2x2
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 0, 0,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 0, 1,
+            fifo_bound_x0, fifo_bound_x0,
+            fifo_x0, fifo_x0,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 1, 0,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y0, fifo_y0,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            PE_GEMM_acc1, 1, 1,
+            fifo_bound_x1, fifo_bound_x1,
+            fifo_x1, fifo_x1,
+            fifo_y1, fifo_y1,
+            fifo_drain_acc1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_8, fifo_bound_x1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_y1
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x0
+        )
+        .invoke<tapa::detach>(
+            black_hole_ap_uint_576, fifo_x1
+        )
+        // end systolic array
         .invoke<tapa::join, NUM_SLR>(packet_switch_acc, fifo_inst_switch_acc0, fifo_inst_switch_sfu, fifo_inst_switch_gelu)
         .invoke<tapa::join, NUM_SLR>(packet_switch_acc, fifo_inst_switch_acc1, fifo_inst_switch_context, fifo_inst_norm)
         .invoke<tapa::join>(write_zero, seq_len, D_write_zero_acc0, fifo_reduce_acc0)
