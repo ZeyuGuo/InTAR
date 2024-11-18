@@ -14,6 +14,9 @@ LDFLAGS=-L$(TAPA_ROOT)/lib -L$(FRT_ROOT)/lib -L$(GLOG_ROOT)/lib -L$(GFLAGS_ROOT)
 opt350-new: kernel.cpp host.cpp
 	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include  
 
+opt350-ultrascale: kernel-ultrascale.cpp host-u280.cpp
+	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include  
+
 host-opencl: host_opencl.o
 	$(ARMGCC) -o $@ $^ -L$(SYSROOT)/usr/lib/ -lxrt_coreutil -lpthread -lrt -lstdc++ -lgmp -lOpenCL --sysroot=$(SYSROOT)
 
@@ -21,6 +24,9 @@ host_opencl.o: host_opencl.cpp
 	$(ARMGCC) -c -D__USE_XOPEN2K8 -I$(SYSROOT)/usr/include/xrt -I$(XILINX_VIVADO)/include -I$(SYSROOT)/usr/include -I$(XILINX_HLS)/include -fmessage-length=0 -std=c++17 --sysroot=$(SYSROOT) -o $@ $^
 
 opt350-versal: kernel-versal.cpp host-versal.cpp
+	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lglog -lgflags -lm -lOpenCL -I$(XILINX_HLS)/include 
+
+opt350-scale: kernel-versal-scale.cpp host-versal.cpp
 	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lglog -lgflags -lm -lOpenCL -I$(XILINX_HLS)/include 
 
 clean:
