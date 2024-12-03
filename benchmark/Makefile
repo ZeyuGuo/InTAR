@@ -17,3 +17,6 @@ yolov3: yolov3.cpp
 
 faster-r-cnn: faster-r-cnn.cpp
 	$(GCC) -o $@ -O2 $^ -lm
+
+clean:
+	rm self-attn mlp cnn-4L vae yolov3 faster-r-cnn
