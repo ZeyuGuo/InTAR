@@ -7,6 +7,11 @@
 using namespace std;
 
 typedef vector<vector<float>> Matrix;
+constexpr int seq_len = 256;
+constexpr int D = 1024;
+constexpr int D_head = 64;
+
+// Kernel
 
 // Helper function to perform matrix multiplication
 void matMul(const Matrix& A, const Matrix& B, Matrix& result) {
@@ -76,7 +81,7 @@ void selfAttention(const Matrix& input, const Matrix& Wq, const Matrix& Wk, cons
     float scale = sqrt(K[0].size());
     for (size_t i = 0; i < scores.size(); ++i) {
         for (size_t j = 0; j < scores[i].size(); ++j) {
-            scores[i][j] /= scale;
+            scores[i][j] /= scale; // scaled attention
         }
     }
 
@@ -88,44 +93,26 @@ void selfAttention(const Matrix& input, const Matrix& Wq, const Matrix& Wk, cons
     matMul(attention_weights, V, output);
 }
 
+
+// Host
+
 int main() {
     // Example input and weight matrices
-    Matrix input = {
-        {1.0, 0.0, 1.0},
-        {1.3, 2.0, 0.0},
-        {1.0, 1.0, 0.0}
-    };
+    Matrix input;
+    input.assign(seq_len, vector<float>(D, 0.1f));
 
-    Matrix Wq = {
-        {0.1, 0.2},
-        {0.3, 0.4},
-        {0.5, 0.6}
-    };
+    Matrix Wq;
+    Wq.assign(D, vector<float>(D, 0.2f));
 
-    Matrix Wk = {
-        {0.1, 0.3},
-        {0.2, 0.4},
-        {0.5, 0.6}
-    };
+    Matrix Wk;
+    Wk.assign(D, vector<float>(D, 0.1f));
 
-    Matrix Wv = {
-        {0.7, 0.8},
-        {0.9, 1.0},
-        {1.1, 1.2}
-    };
+    Matrix Wv;
+    Wv.assign(D, vector<float>(D, 0.3f));
 
     // Compute self-attention
     Matrix output;
     selfAttention(input, Wq, Wk, Wv, output);
-
-    // Print the result
-    cout << "Self-Attention Output:" << endl;
-    for (const auto& row : output) {
-        for (float value : row) {
-            cout << value << " ";
-        }
-        cout << endl;
-    }
 
     return 0;
 }
