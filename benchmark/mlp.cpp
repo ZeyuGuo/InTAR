@@ -6,27 +6,32 @@
 
 using namespace std;
 
+constexpr int input_size = 1024;     // Number of input features
+constexpr int hidden_size1 = 4096;   // Number of neurons in the first hidden layer
+constexpr int hidden_size2 = 8192;   // Number of neurons in the second hidden layer
+constexpr int output_size = 1024;    // Number of output classes
+
 // Helper function for ReLU activation
-void relu(vector<double>& x) {
-    for (double& val : x) {
-        val = max(0.0, val);
+void relu(vector<float>& x) {
+    for (float& val : x) {
+        val = max(0.0f, val);
     }
 }
 
 // Helper function for softmax activation
-void softmax(const vector<double>& logits, vector<double>& result) {
-    double sum_exp = 0.0;
-    for (double val : logits) {
+void softmax(const vector<float>& logits, vector<float>& result) {
+    float sum_exp = 0.0;
+    for (float val : logits) {
         sum_exp += exp(val);
     }
     result.clear();
-    for (double val : logits) {
+    for (float val : logits) {
         result.push_back(exp(val) / sum_exp);
     }
 }
 
 // Initialize weights with random values in [-0.5, 0.5]
-void initialize_weights(vector<vector<double>>& weights, int rows, int cols) {
+void initialize_weights(vector<vector<float>>& weights, int rows, int cols) {
     srand(static_cast<unsigned>(time(0)));
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
@@ -36,7 +41,7 @@ void initialize_weights(vector<vector<double>>& weights, int rows, int cols) {
 }
 
 // Forward pass for one layer
-void forward_layer(const vector<double>& input, const vector<vector<double>>& weights, const vector<double>& biases, vector<double>& output) {
+void forward_layer(const vector<float>& input, const vector<vector<float>>& weights, const vector<float>& biases, vector<float>& output) {
     int num_neurons = weights.size(); // Number of neurons in the layer
     int num_inputs = weights[0].size(); // Number of inputs to the layer
     output.assign(num_neurons, 0.0);
@@ -52,26 +57,26 @@ void forward_layer(const vector<double>& input, const vector<vector<double>>& we
 }
 
 // Multilayer Perceptron: Forward pass with two hidden layers
-void multilayer_perceptron(const vector<double>& input, 
-                           const vector<vector<double>>& weights1, 
-                           const vector<double>& biases1, 
-                           const vector<vector<double>>& weights2, 
-                           const vector<double>& biases2, 
-                           const vector<vector<double>>& weights3, 
-                           const vector<double>& biases3,
-                           vector<double>& output) {
+void multilayer_perceptron(const vector<float>& input, 
+                           const vector<vector<float>>& weights1, 
+                           const vector<float>& biases1, 
+                           const vector<vector<float>>& weights2, 
+                           const vector<float>& biases2, 
+                           const vector<vector<float>>& weights3, 
+                           const vector<float>& biases3,
+                           vector<float>& output) {
     // Forward pass for first hidden layer
-    vector<double> hidden_output1;
+    vector<float> hidden_output1;
     forward_layer(input, weights1, biases1, hidden_output1);
     // weights1: [hidden_size1 x input_size]
 
     // Forward pass for second hidden layer
-    vector<double> hidden_output2;
+    vector<float> hidden_output2;
     forward_layer(hidden_output1, weights2, biases2, hidden_output2);
     // weights2: [hidden_size2 x hidden_size1]
 
     // Forward pass for output layer
-    vector<double> logits(biases3.size(), 0.0);
+    vector<float> logits(biases3.size(), 0.0);
     for (int i = 0; i < biases3.size(); ++i) { // Loop over output neurons
         for (int j = 0; j < hidden_output2.size(); ++j) { // Loop over second hidden layer neurons
             logits[i] += weights3[i][j] * hidden_output2[j];
@@ -85,39 +90,34 @@ void multilayer_perceptron(const vector<double>& input,
 }
 
 int main() {
-    // Define network architecture
-    int input_size = 3;     // Number of input features
-    int hidden_size1 = 4;   // Number of neurons in the first hidden layer
-    int hidden_size2 = 5;   // Number of neurons in the second hidden layer
-    int output_size = 2;    // Number of output classes
 
     // Initialize weights and biases
-    vector<vector<double>> weights1(hidden_size1, vector<double>(input_size, 0.0));
-    vector<double> biases1(hidden_size1, 0.0);
+    vector<vector<float>> weights1(hidden_size1, vector<float>(input_size, 0.2f));
+    vector<float> biases1(hidden_size1, 0.0);
 
-    vector<vector<double>> weights2(hidden_size2, vector<double>(hidden_size1, 0.0));
-    vector<double> biases2(hidden_size2, 0.0);
+    vector<vector<float>> weights2(hidden_size2, vector<float>(hidden_size1, 1.3f));
+    vector<float> biases2(hidden_size2, 0.0);
 
-    vector<vector<double>> weights3(output_size, vector<double>(hidden_size2, 0.0));
-    vector<double> biases3(output_size, 0.0);
+    vector<vector<float>> weights3(output_size, vector<float>(hidden_size2, 0.6f));
+    vector<float> biases3(output_size, 0.0);
 
     initialize_weights(weights1, hidden_size1, input_size);
     initialize_weights(weights2, hidden_size2, hidden_size1);
     initialize_weights(weights3, output_size, hidden_size2);
 
     // Input example
-    vector<double> input = {1.0, 0.5, -1.2};
+    vector<float> input(input_size, 0.1f);
 
     // Forward pass
-    vector<double> output;
+    vector<float> output;
     multilayer_perceptron(input, weights1, biases1, weights2, biases2, weights3, biases3, output);
 
     // Output results
-    cout << "Output probabilities:" << endl;
-    for (double val : output) {
-        cout << val << " ";
-    }
-    cout << endl;
+    // cout << "Output probabilities:" << endl;
+    // for (float val : output) {
+    //     cout << val << " ";
+    // }
+    // cout << endl;
 
     return 0;
 }

@@ -4,10 +4,10 @@
 #include <ctime>
 
 // Hyperparameters
-const int input_dim = 8; // Input size (1D for simplicity)
-const int hidden_dim1 = 4; // Number of neurons in the first hidden layer
-const int hidden_dim2 = 2; // Number of neurons in the second hidden layer
-const int latent_dim = 2;  // Latent space dimensionality
+const int input_dim = 784; // Input size (1D for simplicity)
+const int hidden_dim1 = 392; // Number of neurons in the first hidden layer
+const int hidden_dim2 = 98; // Number of neurons in the second hidden layer
+const int latent_dim = 98;  // Latent space dimensionality
 const int output_dim = input_dim;
 
 // Activation function (ReLU)
@@ -97,26 +97,35 @@ void sample_latent(float* latent_mean, float* latent_log_var, float* latent_samp
     }
 }
 
-int main() {
-    srand(static_cast<unsigned>(time(0)));
-
-    float input[input_dim] = {1.0f, 0.5f, -0.3f, 0.8f, 0.1f, 0.0f, -0.2f, 0.4f}; // Example input
+void VAE(float* input, float* output){
     float latent_mean[latent_dim] = {0};
     float latent_log_var[latent_dim] = {0};
     float latent_sample[latent_dim] = {0};
-    float output[output_dim] = {0};
 
     // Forward pass
     encoder(input, latent_mean, latent_log_var);
     sample_latent(latent_mean, latent_log_var, latent_sample);
     decoder(latent_sample, output);
 
-    // Output results
-    std::cout << "Reconstructed output: ";
-    for (int i = 0; i < output_dim; ++i) {
-        std::cout << output[i] << " ";
+}
+
+int main() {
+    srand(static_cast<unsigned>(time(0)));
+
+    float input[input_dim];
+    for(int i = 0; i < input_dim; i++){
+        input[i] = static_cast<float>(rand()) / RAND_MAX;
     }
-    std::cout << std::endl;
+    float output[output_dim] = {0};
+
+    VAE(input, output);
+
+    // Output results
+    // std::cout << "Reconstructed output: ";
+    // for (int i = 0; i < output_dim; ++i) {
+    //     std::cout << output[i] << " ";
+    // }
+    // std::cout << std::endl;
 
     return 0;
 }
