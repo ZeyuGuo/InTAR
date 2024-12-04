@@ -2,6 +2,8 @@
 #include <vector>
 #include <cmath>
 
+constexpr int image_size = 14;
+
 // Function for 2D convolution
 void conv2D(const std::vector<std::vector<float>>& input,
             const std::vector<std::vector<float>>& kernel,
@@ -24,11 +26,51 @@ void conv2D(const std::vector<std::vector<float>>& input,
     }
 }
 
+void initialize_conv_weights(std::vector<std::vector<std::vector<std::vector<float>>>> &weights,
+                             int num_filters, int channels, int kernel_size) {
+    weights.resize(num_filters, std::vector<std::vector<std::vector<float>>>(
+                                    channels, std::vector<std::vector<float>>(
+                                                 kernel_size, std::vector<float>(kernel_size, 0.1f))));
+}
+
+void convolution_layer(const std::vector<std::vector<std::vector<float>>> &input,
+                       std::vector<std::vector<std::vector<float>>> &output,
+                       const std::vector<std::vector<std::vector<std::vector<float>>>> &weights,
+                       int stride, int kernel_size, int padding_size = 0) {
+    int input_channels = input.size();
+    int output_channels = weights.size();
+    int output_size = (input[0].size() + 2 * padding_size - kernel_size) / stride + 1;
+
+    output.resize(output_channels, std::vector<std::vector<float>>(
+                                      output_size, std::vector<float>(output_size, 0.0f)));
+
+    for (int oc = 0; oc < output_channels; ++oc) { // Loop over output channels
+        for (int i = 0; i < output_size; ++i) {
+            for (int j = 0; j < output_size; ++j) {
+                float sum = 0.0f;
+                for (int ic = 0; ic < input_channels; ++ic) { // Loop over input channels
+                    for (int ki = 0; ki < kernel_size; ++ki) { // Kernel dimension
+                        for (int kj = 0; kj < kernel_size; ++kj) {
+                            int x = i * stride + ki;
+                            int y = j * stride + kj;
+                            auto op1 = (x < input[0].size() && y < input[0].size()) ? input[ic][x][y] : 0.f;
+                            sum += op1 * weights[oc][ic][ki][kj];
+                        }
+                    }
+                }
+                output[oc][i][j] = sum;
+            }
+        }
+    }
+}
+
 // Function to apply ReLU activation
-void relu(std::vector<std::vector<float>>& input) {
-    for (auto& row : input) {
-        for (auto& val : row) {
-            val = std::max(0.0f, val);
+void relu(std::vector<std::vector<std::vector<float>>>& input) {
+    for (auto& channel : input){
+        for (auto& row : channel) {
+            for (auto& val : row) {
+                val = std::max(0.0f, val);
+            }
         }
     }
 }
@@ -77,52 +119,69 @@ void classifyRegions(const std::vector<std::pair<int, int>>& proposals,
     }
 }
 
+void residual(std::vector<std::vector<std::vector<float>>>& vec1, std::vector<std::vector<std::vector<float>>>& vec2, std::vector<std::vector<std::vector<float>>>& output){
+    int i_bound = vec1.size();
+    int j_bound = vec1[0].size();
+    int k_bound = vec1[0][0].size();
+
+    output.resize(i_bound, std::vector<std::vector<float>>(j_bound, std::vector<float>(k_bound, 0.f)));
+
+    for(int i = 0; i < i_bound; i++){
+        for(int j = 0; j < j_bound; j++){
+            for(int k = 0; k < k_bound; k++){
+                output[i][j][k] = vec1[i][j][k] + vec2[i][j][k];
+            }
+        }
+    }
+}
+
+void Faster_R_CNN(
+    const std::vector<std::vector<std::vector<float>>>& input,
+    const std::vector<std::vector<std::vector<std::vector<float>>>> &conv1_weights, //7x7
+    const std::vector<std::vector<std::vector<std::vector<float>>>> &conv2_weights, //1x1
+    const std::vector<std::vector<std::vector<std::vector<float>>>> &conv3_weights, //3x3
+    std::vector<std::vector<int>>& classes
+){
+    std::vector<std::vector<std::vector<float>>> conv1_output;
+    convolution_layer(input, conv1_output, conv1_weights, 2, 7, 4);
+    relu(conv1_output);
+
+    std::vector<std::vector<std::vector<float>>> conv2_output;
+    std::vector<std::vector<std::vector<float>>> conv3_output;
+    std::vector<std::vector<std::vector<float>>> residual_output;
+    convolution_layer(conv1_output, conv2_output, conv2_weights, 1, 1, 0);
+    relu(conv2_output);
+    convolution_layer(conv2_output, conv3_output, conv3_weights, 1, 3, 1);
+    relu(conv3_output);
+    residual(conv1_output, conv3_output, residual_output);
+    conv1_output = residual_output;
+
+    for(auto& channel : conv1_output){
+        std::vector<std::pair<int, int>> proposal;
+        std::vector<int> c_class;
+        regionProposal(channel, proposal);
+        classifyRegions(proposal, c_class);
+        classes.push_back(c_class);
+    }
+
+}
+
 int main() {
-    // Example input image (5x5)
-    std::vector<std::vector<float>> input = {
-        {1, 2, 3, 4, 5},
-        {5, 4, 3, 2, 1},
-        {1, 3, 5, 3, 1},
-        {1, 2, 1, 2, 1},
-        {3, 4, 5, 4, 3}
-    };
+    // Example input (3 channels, 8x8)
+    std::vector<std::vector<std::vector<float>>> input(1024, std::vector<std::vector<float>>(
+                                                           image_size, std::vector<float>(image_size, 1.0f)));
 
-    // Example kernel (3x3)
-    std::vector<std::vector<float>> kernel = {
-        {1, 2, -1},
-        {1, 3, -1},
-        {1, 1, -1}
-    };
+    // Convolution layer
+    std::vector<std::vector<std::vector<std::vector<float>>>> conv_weights1;
+    std::vector<std::vector<std::vector<std::vector<float>>>> conv_weights2;
+    std::vector<std::vector<std::vector<std::vector<float>>>> conv_weights3;
+    initialize_conv_weights(conv_weights1, 2048, 1024, 7); // 8 filters, 3 input channels, kernel size 3x3
+    initialize_conv_weights(conv_weights2, 1024, 2048, 1);
+    initialize_conv_weights(conv_weights3, 2048, 1024, 3);
 
-    // Convolution output
-    std::vector<std::vector<float>> convOutput;
-    conv2D(input, kernel, convOutput);
+    std::vector<std::vector<int>> classes;
 
-    // Apply ReLU
-    relu(convOutput);
-
-    // Max pooling with pool size 2
-    std::vector<std::vector<float>> pooledOutput;
-    maxPool(convOutput, pooledOutput, 2);
-
-    // Region proposals
-    std::vector<std::pair<int, int>> proposals;
-    regionProposal(pooledOutput, proposals);
-
-    // Classification
-    std::vector<int> classes;
-    classifyRegions(proposals, classes);
-
-    // Output results
-    std::cout << "Region Proposals:" << std::endl;
-    for (const auto& proposal : proposals) {
-        std::cout << "(" << proposal.first << ", " << proposal.second << ")" << std::endl;
-    }
-
-    std::cout << "Classes:" << std::endl;
-    for (int cls : classes) {
-        std::cout << cls << std::endl;
-    }
+    Faster_R_CNN(input, conv_weights1, conv_weights2, conv_weights3, classes);
 
     return 0;
 }
