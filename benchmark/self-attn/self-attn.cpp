@@ -9,7 +9,7 @@ using namespace std;
 typedef vector<vector<float>> Matrix;
 constexpr int seq_len = 256;
 constexpr int D = 1024;
-constexpr int D_head = 64;
+constexpr int D_head = 1024;
 
 // Kernel
 
@@ -32,11 +32,10 @@ void matMul(const Matrix& A, const Matrix& B, Matrix& result) {
 // Helper function to apply softmax to a vector
 void softmax(const vector<float>& input, vector<float>& output) {
     output.resize(input.size());
-    float max_val = *max_element(input.begin(), input.end());
     float sum = 0.0;
 
     for (size_t i = 0; i < input.size(); ++i) {
-        output[i] = exp(input[i] - max_val);
+        output[i] = exp(input[i]);
         sum += output[i];
     }
     for (size_t i = 0; i < output.size(); ++i) {
