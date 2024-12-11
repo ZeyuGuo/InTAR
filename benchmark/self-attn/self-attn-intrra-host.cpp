@@ -61,6 +61,7 @@ int main(int argc, char *argv[]){
         tapa::write_only_mmap<int>(cycle_count));
 
     std::cout << "Cycle count: " << cycle_count[0] << std::endl;
+    std::cout << "Latency: " << kernel_time_ns * 1e-9 << " s" << std::endl;
 
     return 0;
 }
