@@ -11,10 +11,55 @@ constexpr int hidden_size1 = 1024;   // Number of neurons in the first hidden la
 constexpr int hidden_size1_div_2 = hidden_size1 / 2;
 constexpr int hidden_size2 = 2048;   // Number of neurons in the second hidden layer
 constexpr int output_size = 256;    // Number of output classes
+constexpr int output_size_div_16 = output_size / 16;
 constexpr int weight_size_cc0 = input_size * hidden_size1 / 32 + hidden_size1 * hidden_size2 /16;
 constexpr int weight_size_cc1 = input_size * hidden_size1 / 32 + hidden_size2 * output_size /16;
 
 using int16_v16 = tapa::vec_t<ap_int<16>, 16>;
+
+struct ConfigInst {
+    ap_uint<2> stage;
+    ap_uint<11> i_bound;
+    ap_uint<11> j_bound;
+};
+
+void send_inst_cc0(
+    tapa::ostream<ConfigInst>& fifo_inst
+){
+    for(int stage = 0; stage < 2; stage++){
+        ConfigInst inst;
+        inst.stage = ap_uint<2>(stage);
+
+        if(stage == 0){
+            inst.i_bound = (hidden_size1 >> 5);
+            inst.j_bound = input_size;
+        } else {
+            inst.i_bound = (hidden_size2 >> 4);
+            inst.j_bound = hidden_size1;
+        }
+
+        fifo_inst.write(inst);
+    }
+}
+
+void send_inst_cc1(
+    tapa::ostream<ConfigInst>& fifo_inst
+){
+    for(int stage = 0; stage < 2; stage++){
+        ConfigInst inst;
+        inst.stage = ap_uint<2>(stage);
+
+        if(stage == 0){
+            inst.i_bound = (hidden_size1 >> 5);
+            inst.j_bound = input_size;
+        } else {
+            inst.i_bound = (hidden_size2 >> 4);
+            inst.j_bound = output_size;
+        }
+
+        fifo_inst.write(inst);
+    }
+}
 
 void read_W(
     const int w_size,
@@ -83,6 +128,7 @@ void write_mtx(
 void CC0_F1_F2(
     tapa::istream<int16_v16>& fifo_input,
     tapa::istream<int16_v16>& fifo_weight,
+    tapa::istream<ConfigInst>& fifo_inst,
     tapa::istream<int16_v16>& fifo_from_CC1,
     tapa::ostream<int16_v16>& fifo_to_CC1
 ){
@@ -105,61 +151,59 @@ void CC0_F1_F2(
             i++;
         }
     }
-    // stage 1: FFN 1
-    for(int i = 0; i < (hidden_size1 >> 5); i++){
-        
-        int16_v16 sum;
-        for(int k = 0; k < 16; k++){
-            #pragma HLS unroll
-            sum[k] = 0;
-        }
 
-        for(int j = 0; j < input_size; j++){
-            #pragma HLS pipeline II=1
+    for(int st = 0; st < 2; st++){
+        ConfigInst inst = fifo_inst.read();
+        const int stage = inst.stage;
+        const int i_bound = inst.i_bound;
+        const int j_bound = inst.j_bound;
 
-            int16_v16 tmp = fifo_weight.read();
+        for(int i = 0; i < i_bound; i++){
+            
+            int16_v16 sum;
             for(int k = 0; k < 16; k++){
                 #pragma HLS unroll
-                sum[k] += X[j] * tmp[k];
+                sum[k] = 0;
+            }
+
+            for(int j = 0; j < j_bound; j++){
+                #pragma HLS pipeline II=1
+
+                int16_v16 tmp = fifo_weight.read();
+
+                ap_int<16> op1;
+                if(stage == 0){
+                    op1 = X[j];
+                } else {
+                    op1 = scratchpad[j];
+                }
+
+                for(int k = 0; k < 16; k++){
+                    #pragma HLS unroll
+                    sum[k] += op1 * tmp[k];
+                }
+            }
+
+            if(stage == 0){
+                int16_v16 tmp_acc1 = fifo_from_CC1.read();
+                for(int j = 0; j < 16; j++){
+                    #pragma HLS unroll
+                    ap_int<16> sum_relu = (sum[j] < 0) ? ap_int<16>(0) : sum[j];
+                    ap_int<16> tmp_relu = (tmp_acc1[j] < 0) ? ap_int<16>(0) : tmp_acc1[j];
+                    scratchpad[i*32+j] = sum_relu;
+                    scratchpad[i*32+j+16] = tmp_relu;
+                }
+            } else {
+                fifo_to_CC1.write(sum);
             }
         }
-
-        int16_v16 tmp_acc1 = fifo_from_CC1.read();
-        for(int j = 0; j < 16; j++){
-            #pragma HLS unroll
-            ap_int<16> sum_relu = (sum[j] < 0) ? ap_int<16>(0) : sum[j];
-            ap_int<16> tmp_relu = (tmp_acc1[j] < 0) ? ap_int<16>(0) : tmp_acc1[j];
-            scratchpad[i*32+j] = sum_relu;
-            scratchpad[i*32+j+16] = tmp_relu;
-        }
-    }
-
-    // stage 2: FFN 2 -> CC1
-
-    for(int i = 0; i < (hidden_size2 >> 4); i++){
-        int16_v16 sum;
-        for(int k = 0; k < 16; k++){
-            #pragma HLS unroll
-            sum[k] = 0;
-        }
-
-        for(int j = 0; j < hidden_size1; j++){
-            #pragma HLS pipeline II=1
-
-            int16_v16 tmp = fifo_weight.read();
-            for(int k = 0; k < 16; k++){
-                #pragma HLS unroll
-                sum[k] += X[j] * tmp[k];
-            }
-        }
-
-        fifo_to_CC1.write(sum);
     }
 }
 
 void CC1_F1_F3(
     tapa::istream<int16_v16>& fifo_input,
     tapa::istream<int16_v16>& fifo_weight,
+    tapa::istream<ConfigInst>& fifo_inst,
     tapa::istream<int16_v16>& fifo_from_CC0,
     tapa::ostream<int16_v16>& fifo_to_CC0,
     tapa::ostream<int16_v16>& fifo_output
@@ -183,56 +227,91 @@ void CC1_F1_F3(
             i++;
         }
     }
-    // stage 1: FFN 1
-    for(int i = 0; i < (hidden_size1 >> 5); i++){
-        
-        int16_v16 sum;
-        for(int k = 0; k < 16; k++){
-            #pragma HLS unroll
-            sum[k] = 0;
-        }
 
-        for(int j = 0; j < input_size; j++){
-            #pragma HLS pipeline II=1
 
-            int16_v16 tmp = fifo_weight.read();
-            for(int k = 0; k < 16; k++){
-                #pragma HLS unroll
-                sum[k] += X[j] * tmp[k];
+    for(int st = 0; st < 2; st++){
+    
+        ConfigInst inst = fifo_inst.read();
+        const int stage = inst.stage;
+        const int i_bound = inst.i_bound;
+        const int j_bound = inst.j_bound;
+
+        if(stage == 1) {
+            for(int i = 0; i < (output_size >> 4); i++){
+                for(int j = 0; j < 16; j++){
+                    #pragma HLS unroll
+                    scratchpad[i*16+j] = 0;
+                }
             }
         }
 
-        fifo_to_CC0.write(sum);
+        for(int i = 0; i < i_bound; i++){
+            
+            int16_v16 sum;
+
+            if(stage == 0){
+                for(int k = 0; k < 16; k++){
+                    #pragma HLS unroll
+                    sum[k] = 0;
+                }
+            } else {
+                sum = fifo_from_CC0.read();
+            }
+
+            for(int j = 0; j < j_bound; j++){
+                #pragma HLS pipeline II=1
+
+                int16_v16 tmp = fifo_weight.read();
+
+                ap_int<16> op_res_mtx[16];
+                ap_int<16> op1_mtx[16];
+                #pragma HLS array_partition variable=op_res_mtx complete
+                #pragma HLS array_partition variable=op1_mtx complete
+
+                for(int k = 0; k < 16; k++){
+                    #pragma HLS unroll
+                    if(stage == 0){
+                        op_res_mtx[k] = sum[k];
+                        op1_mtx[k] = X[j];
+                    } else {
+                        op_res_mtx[k] = scratchpad[(j%output_size_div_16)*16+k];
+                        op1_mtx[k] = sum[j/output_size_div_16];
+                    }
+                }
+
+                for(int k = 0; k < 16; k++){
+                    #pragma HLS unroll
+
+                    op_res_mtx[k] += op1_mtx[k] * tmp[k];
+
+                }
+
+                for(int k = 0; k < 16; k++){
+                    #pragma HLS unroll
+                    if(stage == 0){
+                        sum[k] = op_res_mtx[k];
+                    } else {
+                        scratchpad[(j%output_size_div_16)*16+k] = op_res_mtx[k];
+                    }
+                }
+            }
+
+            if(stage == 0){
+                fifo_to_CC0.write(sum);
+            }
+        }
+
     }
 
     for(int i = 0; i < (output_size >> 4); i++){
-        for(int j = 0; j < 16; j++){
+        #pragma HLS pipeline II=1
+
+        int16_v16 tmp_out;
+        for(int k = 0; k < 16; k++){
             #pragma HLS unroll
-            scratchpad[i*16+j] = 0;
+            tmp_out[k] = scratchpad[i*16+k];
         }
-    }
-
-    for(int i = 0; i < (hidden_size2 >> 4); i++){
-        int16_v16 inp = fifo_from_CC0.read();
-
-        for(int j = 0; j < output_size; j++){
-            #pragma HLS pipeline II=1
-
-            int16_v16 tmp = fifo_weight.read();
-            for(int k = 0; k < 16; k++){
-                #pragma HLS unroll
-                scratchpad[(j/16)*16+k] += inp[j%16] * tmp[k];
-            }
-
-            if(i == (hidden_size2 >> 4)-1 && j%16 == 15){
-                int16_v16 tmp_out;
-                for(int k = 0; k < 16; k++){
-                    #pragma HLS unroll
-                    tmp_out[k] = scratchpad[(j/16)*16+k];
-                }
-                fifo_output.write(tmp_out);
-            }
-        }
+        fifo_output.write(tmp_out);
     }
 
 }
@@ -284,15 +363,20 @@ void MLP(
     tapa::stream<int16_v16> fifo_output("fifo_output");
     tapa::stream<int16_v16> fifo_output_relu("fifo_output_relu");
 
+    tapa::stream<ConfigInst> fifo_inst_cc0("fifo_inst_cc0");
+    tapa::stream<ConfigInst> fifo_inst_cc1("fifo_inst_cc1");
+
     tapa::task()
         .invoke<tapa::join>(read_W, weight_size_cc0, W_acc0, fifo_weight_CC0)
         .invoke<tapa::join>(read_W, weight_size_cc1, W_acc1, fifo_weight_CC1)
         .invoke<tapa::join>(read_X, X_acc0, fifo_input_CC0)
         .invoke<tapa::join>(read_X, X_acc1, fifo_input_CC1)
-        .invoke<tapa::join>(CC0_F1_F2, fifo_input_CC0, fifo_weight_CC0, fifo_from_SFU_to_CC0, fifo_from_CC0_to_SFU)
+        .invoke<tapa::join>(send_inst_cc0, fifo_inst_cc0)
+        .invoke<tapa::join>(send_inst_cc1, fifo_inst_cc1)
+        .invoke<tapa::join>(CC0_F1_F2, fifo_input_CC0, fifo_weight_CC0, fifo_inst_cc0, fifo_from_SFU_to_CC0, fifo_from_CC0_to_SFU)
         .invoke<tapa::detach>(relu, fifo_from_CC0_to_SFU, fifo_from_SFU_to_CC1)
         .invoke<tapa::detach>(relu, fifo_from_CC1_to_SFU, fifo_from_SFU_to_CC0)
-        .invoke<tapa::join>(CC1_F1_F3, fifo_input_CC1, fifo_weight_CC1, fifo_from_SFU_to_CC1, fifo_from_CC1_to_SFU, fifo_output)
+        .invoke<tapa::join>(CC1_F1_F3, fifo_input_CC1, fifo_weight_CC1, fifo_inst_cc1, fifo_from_SFU_to_CC1, fifo_from_CC1_to_SFU, fifo_output)
         .invoke<tapa::detach>(relu, fifo_output, fifo_output_relu)
         .invoke<tapa::join>(write_mtx, acc1_out, fifo_output_relu, fifo_fin)
         .invoke<tapa::join>(measure_cycle, fifo_fin, cycle_count);
