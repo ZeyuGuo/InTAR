@@ -2,6 +2,9 @@
 llama2
 run
 */*.tapa
-*/vitis_run_hw
-*/vitis_run_hw_emu
+**/vitis_run_hw*
 */.ipcache
+**/work.out
+*/rs_build*
+*/gpt2_build*
+*/gpt2_u55c_build*
