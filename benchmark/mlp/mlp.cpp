@@ -91,8 +91,7 @@ void multilayer_perceptron(const vector<float>& input,
 
     std::cout << logits.size() << std::endl;
 
-    // Apply softmax to output layer logits
-    softmax(logits, output);
+    output = logits;
 }
 
 int main() {
@@ -117,13 +116,6 @@ int main() {
     // Forward pass
     vector<float> output;
     multilayer_perceptron(input, weights1, biases1, weights2, biases2, weights3, biases3, output);
-
-    // Output results
-    // cout << "Output probabilities:" << endl;
-    // for (float val : output) {
-    //     cout << val << " ";
-    // }
-    // cout << endl;
 
     return 0;
 }
