@@ -24,8 +24,8 @@ constexpr int output_height = input_height;
 constexpr int output_width = input_width;
 constexpr int output_size = output_height * output_width * num_channel;
 
-constexpr int weight_size_cc0 = (kernel_total_size1 + kernel_total_size2 + kernel_total_size1 * num_channel)/16;
-constexpr int weight_size_cc1 = (kernel_total_size1 + kernel_total_size2 + kernel_total_size2 * num_channel)/16;
+constexpr int weight_size_cc0 = (kernel_total_size1 + kernel_total_size2 + kernel_total_size1 * num_channel) * num_channel/16;
+constexpr int weight_size_cc1 = (kernel_total_size1 + kernel_total_size2 + kernel_total_size2 * num_channel) * num_channel/16;
 
 
 using int16_v16 = tapa::vec_t<ap_int<16>, 16>;
@@ -90,7 +90,7 @@ void write_mtx(
         #pragma HLS pipeline II=1 style=stp
         if((i_req < output_size) & !fifo_in.empty() & !output_mtx.write_addr.full() & !output_mtx.write_data.full()){
             output_mtx.write_addr.try_write(i_req);
-            int16_v16 tmp; fifo_in.try_read(tmp);
+            ap_int<16> tmp; fifo_in.try_read(tmp);
             output_mtx.write_data.try_write(tmp);
             ++i_req;
         }
@@ -212,8 +212,8 @@ void CC0_Encoder_Decoder_Conv1(
         for(int f = 0; f < num_channel; f++){
             for (int i = 0; i < hidden3_size; i++) {
                 for (int j = 0; j < hidden3_size; j++) {
+                    ap_int<16> tmp = 0;
                     for(int c = 0; c < num_channel; c++){
-                        ap_int<16> tmp = 0;
                         int16_v64 inp = fifo_from_latent_sample.read();
                         for (int ki = 0; ki < kernel_size1; ki++) {
                             for (int kj = 0; kj < kernel_size1; kj++) {
@@ -252,8 +252,8 @@ void central_mem_cache(
         for(int j = 0; j < hidden1_size; j++){
             ap_int<16> tmp1 = fifo_from_CC0.read();
             ap_int<16> tmp2 = fifo_from_CC1.read();
-            auto res1 = hidden_cache[0][i][j] + tmp1;
-            auto res2 = hidden_cache[1][i][j] + tmp2;
+            ap_int<16> res1 = hidden_cache[0][i][j] + tmp1;
+            ap_int<16> res2 = hidden_cache[1][i][j] + tmp2;
             hidden_cache[0][i][j] = (res1 > 0) ? res1 : ap_int<16>(0);
             hidden_cache[1][i][j] = (res2 > 0) ? res2 : ap_int<16>(0);
         }
@@ -270,8 +270,8 @@ void central_mem_cache(
                     }
                 }
             }
-            fifo_to_CC0.write(tmp);
-            fifo_to_CC1.write(tmp);
+            fifo_to_CC0.write(inp);
+            fifo_to_CC1.write(inp);
         }
     }
 }
@@ -288,19 +288,8 @@ void latent_sample(
 
     for(int i = 0; i < hidden2_size; i++){
         for(int j = 0; j < hidden2_size; j++){
-            ap_int<16> tmp1 = fifo_from_CC0.read();
-            ap_int<16> tmp2 = fifo_from_CC1.read();
-            hidden_cache[0][i][j] = tmp1;
-            hidden_cache[1][i][j] = tmp2;
-        }
-    }
-
-    for(int i = 0; i < hidden2_size; i++){
-        for(int j = 0; j < hidden2_size; j++){
-            ap_int<16> tmp1 = fifo_from_CC0.read();
-            ap_int<16> tmp2 = fifo_from_CC1.read();
-            auto res1 = hidden_cache[0][i][j] + tmp1;
-            auto res2 = hidden_cache[1][i][j] + tmp2;
+            ap_int<16> res1 = fifo_from_CC0.read();
+            ap_int<16> res2 = fifo_from_CC1.read();
             res1 = (res1 > 0) ? res1 : ap_int<16>(0);
             res2 = (res2 > 0) ? res2 : ap_int<16>(0);
             hidden_cache[0][i][j] = res1 + ap_int<16>((int)(hls::exp((res2 >> 1)) * 0.05));
@@ -475,7 +464,7 @@ void final_relu(tapa::istream<ap_int<16>>& fifo_in, tapa::ostream<ap_int<16>>& f
 
         for(int j = 0; j < hidden4_size; j++){
             for(int k = 0; k < hidden4_size; k++){
-                output_cache[i][j][k] = 0;
+                output_cache[j][k] = 0;
             }
         }
 
@@ -530,7 +519,6 @@ void VAE(
     tapa::stream<ap_int<16>> fifo_to_ctr_mem_cc1("fifo_to_ctr_mem_cc1");
     tapa::stream<int16_v32> fifo_from_ctr_mem_cc1("fifo_from_ctr_mem_cc1");
     tapa::stream<ap_int<16>> fifo_to_latent_sample_cc1("fifo_to_latent_sample_cc1");
-    tapa::stream<ap_int<16>> fifo_from_CC0("fifo_from_CC0");
     tapa::stream<ap_int<16>> fifo_output("fifo_output");
 
     tapa::stream<bool> fifo_fin("fifo_fin");
@@ -560,7 +548,7 @@ void VAE(
             fifo_to_ctr_mem_cc1,
             fifo_from_ctr_mem_cc1,
             fifo_to_latent_sample_cc1,
-            fifo_from_CC0,
+            fifo_to_CC1,
             fifo_output
         )
         .invoke<tapa::join>(final_relu, fifo_output, fifo_output_relu)
