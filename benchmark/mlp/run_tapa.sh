@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 ml load xilinx/vivado/2021.2
 tapac \
-    -o self-attn.xo \
+    -o mlp.xo \
     --platform xilinx_u280_xdma_201920_3 \
     --top MLP \
     --work-dir mlp.tapa \

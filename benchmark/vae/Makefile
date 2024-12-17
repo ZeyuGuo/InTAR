@@ -10,4 +10,4 @@ vae-intrra-hls: vae-intrra-kernel.cpp
 	bash run_tapa.sh
 
 clean:
-	rm vae
+	rm -f vae vae-intrra
