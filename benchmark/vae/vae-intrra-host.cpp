@@ -37,7 +37,7 @@ void VAE(
     tapa::mmap<int16_v16> X_acc1,
     tapa::mmap<int16_v16> W_acc0,
     tapa::mmap<int16_v16> W_acc1,
-    tapa::mmap<ap_int<16>> acc1_out,
+    tapa::mmap<int> acc1_out,
     tapa::mmap<int> cycle_count
 );
 
@@ -59,7 +59,7 @@ int main(int argc, char *argv[]){
     aligned_vector<ap_int<16>> input2(input_size);
     aligned_vector<ap_int<16>> weight_cc0(weight_size_cc0*16);
     aligned_vector<ap_int<16>> weight_cc1(weight_size_cc1*16);
-    aligned_vector<ap_int<16>> acc1_out(output_size);
+    aligned_vector<int> acc1_out(output_size);
     aligned_vector<int> cycle_count(1);
 
     int64_t kernel_time_ns = tapa::invoke(VAE, FLAGS_bitstream,
@@ -67,7 +67,7 @@ int main(int argc, char *argv[]){
         tapa::read_only_mmap<ap_int<16>>(input2).reinterpret<int16_v16>(),
         tapa::read_only_mmap<ap_int<16>>(weight_cc0).reinterpret<int16_v16>(),
         tapa::read_only_mmap<ap_int<16>>(weight_cc1).reinterpret<int16_v16>(),
-        tapa::write_only_mmap<ap_int<16>>(acc1_out),
+        tapa::write_only_mmap<int>(acc1_out),
         tapa::write_only_mmap<int>(cycle_count));
 
     std::cout << "Cycle count: " << cycle_count[0] << std::endl;

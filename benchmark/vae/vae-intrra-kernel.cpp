@@ -81,7 +81,7 @@ void read_X(
 }
 
 void write_mtx(
-    tapa::async_mmap<ap_int<16>>& output_mtx,
+    tapa::async_mmap<int>& output_mtx,
     tapa::istream<ap_int<16>>& fifo_in,
     tapa::ostream<bool>& fifo_fin
 ){
@@ -91,7 +91,8 @@ void write_mtx(
         if((i_req < output_size) & !fifo_in.empty() & !output_mtx.write_addr.full() & !output_mtx.write_data.full()){
             output_mtx.write_addr.try_write(i_req);
             ap_int<16> tmp; fifo_in.try_read(tmp);
-            output_mtx.write_data.try_write(tmp);
+            int tmp_out = tmp;
+            output_mtx.write_data.try_write(tmp_out);
             ++i_req;
         }
         bool success = false;
@@ -521,7 +522,7 @@ void VAE(
     tapa::mmap<int16_v16> X_acc1,
     tapa::mmap<int16_v16> W_acc0,
     tapa::mmap<int16_v16> W_acc1,
-    tapa::mmap<ap_int<16>> acc1_out,
+    tapa::mmap<int> acc1_out,
     tapa::mmap<int> cycle_count
 ) {
     tapa::stream<int16_v16> fifo_input_CC0("fifo_input_CC0");
