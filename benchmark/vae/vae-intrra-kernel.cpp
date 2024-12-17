@@ -120,10 +120,12 @@ void CC0_Encoder_Decoder_Conv1(
 
     ap_int<16> kernel2[num_channel][kernel_total_size2];
     #pragma HLS array_partition variable=kernel2 complete dim=2
+    #pragma HLS array_partition variable=kernel2 complete dim=1
 
 
     for(int c = 0; c < num_channel; c++){
         for(int i = 0; i < (kernel_total_size1 >> 4); i++){
+            #pragma HLS pipeline II=1
             int16_v16 tmp = fifo_weight.read();
             for(int j = 0; j < 16; j++){
                 #pragma HLS unroll
@@ -160,7 +162,9 @@ void CC0_Encoder_Decoder_Conv1(
                 #pragma HLS pipeline II=1
                 ap_int<16> tmp = 0;
                 for (int ki = 0; ki < kernel_size1; ki++) {
+                    #pragma HLS unroll
                     for (int kj = 0; kj < kernel_size1; kj++) {
+                        #pragma HLS unroll
                         tmp += X[i + ki][j + kj] * kernel1[c][0][ki * kernel_size1 + kj];
                     }
                 }
@@ -171,6 +175,7 @@ void CC0_Encoder_Decoder_Conv1(
 
     for(int c = 0; c < num_channel; c++){
         for(int i = 0; i < (kernel_total_size2 >> 4); i++){
+            #pragma HLS pipeline II=1
             int16_v16 tmp = fifo_weight.read();
             for(int j = 0; j < 16; j++){
                 #pragma HLS unroll
@@ -199,6 +204,7 @@ void CC0_Encoder_Decoder_Conv1(
     for(int c = 0; c < num_channel; c++){
         for(int f = 0; f < num_channel; f++){
             for(int i = 0; i < (kernel_total_size1 >> 4); i++){
+                #pragma HLS pipeline II=1
                 int16_v16 tmp = fifo_weight.read();
                 for(int j = 0; j < 16; j++){
                     #pragma HLS unroll
@@ -214,6 +220,7 @@ void CC0_Encoder_Decoder_Conv1(
                 for (int j = 0; j < hidden3_size; j++) {
                     ap_int<16> tmp = 0;
                     for(int c = 0; c < num_channel; c++){
+                        #pragma HLS pipeline II=1
                         int16_v64 inp = fifo_from_latent_sample.read();
                         for (int ki = 0; ki < kernel_size1; ki++) {
                             for (int kj = 0; kj < kernel_size1; kj++) {
@@ -241,6 +248,7 @@ void central_mem_cache(
 
     for(int i = 0; i < hidden1_size; i++){
         for(int j = 0; j < hidden1_size; j++){
+            #pragma HLS pipeline II=1
             ap_int<16> tmp1 = fifo_from_CC0.read();
             ap_int<16> tmp2 = fifo_from_CC1.read();
             hidden_cache[0][i][j] = tmp1;
@@ -250,6 +258,8 @@ void central_mem_cache(
 
     for(int i = 0; i < hidden1_size; i++){
         for(int j = 0; j < hidden1_size; j++){
+            #pragma HLS pipeline II=1
+            #pragma HLS dependence variable=hidden_cache type=inter false
             ap_int<16> tmp1 = fifo_from_CC0.read();
             ap_int<16> tmp2 = fifo_from_CC1.read();
             ap_int<16> res1 = hidden_cache[0][i][j] + tmp1;
@@ -283,11 +293,12 @@ void latent_sample(
 ){
     ap_int<16> hidden_cache[num_channel][hidden2_size][hidden2_size];
     #pragma HLS array_partition variable=hidden_cache complete dim=1
-    #pragma HLS array_partition variable=hidden_cache cyclic factor=4 dim=2
-    #pragma HLS array_partition variable=hidden_cache cyclic factor=4 dim=3
+    #pragma HLS array_partition variable=hidden_cache complete dim=2
+    #pragma HLS array_partition variable=hidden_cache complete dim=3
 
     for(int i = 0; i < hidden2_size; i++){
         for(int j = 0; j < hidden2_size; j++){
+            #pragma HLS pipeline II=1
             ap_int<16> res1 = fifo_from_CC0.read();
             ap_int<16> res2 = fifo_from_CC1.read();
             res1 = (res1 > 0) ? res1 : ap_int<16>(0);
@@ -302,13 +313,14 @@ void latent_sample(
             for (int i = 0; i < hidden3_size; i++) {
                 for (int j = 0; j < hidden3_size; j++) {
                     for(int c = 0; c < num_channel; c++){
+                        #pragma HLS pipeline II=1
                         int16_v64 inp;
                         for (int ki = 0; ki < kernel_size1; ki++) {
                             for (int kj = 0; kj < kernel_size1; kj++) {
                                 int ii = i - ki;
                                 int jj = j - kj;
-                                if(ii >= 0 && ii < hidden2_size && jj >= 0 && jj < hidden2_size){
-                                    inp[ki*kernel_size1+kj] = hidden_cache[ii][jj];
+                                if((ii >= 0) & (ii < hidden2_size) & (jj >= 0) & (jj < hidden2_size)){
+                                    inp[ki*kernel_size1+kj] = hidden_cache[c][ii][jj];
                                 } else {
                                     inp[ki*kernel_size1+kj] = 0;
                                 }
@@ -336,10 +348,12 @@ void CC1_Encoder_Decoder_Conv2(
 
     ap_int<16> kernel2[num_channel][num_channel][kernel_total_size2];
     #pragma HLS array_partition variable=kernel2 complete dim=3
+    #pragma HLS array_partition variable=kernel2 complete dim=1
 
 
     for(int c = 0; c < num_channel; c++){
         for(int i = 0; i < (kernel_total_size1 >> 4); i++){
+            #pragma HLS pipeline II=1
             int16_v16 tmp = fifo_weight.read();
             for(int j = 0; j < 16; j++){
                 #pragma HLS unroll
@@ -387,6 +401,7 @@ void CC1_Encoder_Decoder_Conv2(
 
     for(int c = 0; c < num_channel; c++){
         for(int i = 0; i < (kernel_total_size2 >> 4); i++){
+            #pragma HLS pipeline II=1
             int16_v16 tmp = fifo_weight.read();
             for(int j = 0; j < 16; j++){
                 #pragma HLS unroll
@@ -415,6 +430,8 @@ void CC1_Encoder_Decoder_Conv2(
     for(int c = 0; c < num_channel; c++){
         for(int f = 0; f < num_channel; f++){
             for(int i = 0; i < (kernel_total_size2 >> 4); i++){
+                #pragma HLS pipeline II=1
+
                 int16_v16 tmp = fifo_weight.read();
                 for(int j = 0; j < 16; j++){
                     #pragma HLS unroll
@@ -433,6 +450,7 @@ void CC1_Encoder_Decoder_Conv2(
 
             for(int i = 0; i < hidden3_size; i++){
                 for(int j = 0; j < hidden3_size; j++){
+                    #pragma HLS pipeline II=1
                     ap_int<16> tmp = fifo_from_CC0.read();
                     hidden_cache[i][j] = tmp;
                 }
@@ -440,6 +458,7 @@ void CC1_Encoder_Decoder_Conv2(
 
             for (int i = 0; i < hidden4_size; i++) {
                 for (int j = 0; j < hidden4_size; j++) {
+                    #pragma HLS pipeline II=1
                     ap_int<16> tmp = 0;
                     for (int ki = 0; ki < kernel_size1; ki++) {
                         for (int kj = 0; kj < kernel_size1; kj++) {
