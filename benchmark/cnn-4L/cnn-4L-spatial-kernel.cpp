@@ -80,6 +80,7 @@ void conv_layer1(
     tapa::ostream<int16_v16>& fifo_output
 ) {
     constexpr int input_shape = image_shape;
+    constexpr int output_shape = image_shape;
 
     ap_int<16> X[kernel_shape][input_shape];
     ap_int<16> kernel[16];
@@ -98,11 +99,20 @@ void conv_layer1(
         }
     }
 
+    // Initialize first row
+    for (int i = 0; i < input_shape; i++) {
+        #pragma HLS unroll
+        for (int j = 0; j < 16; j++) {
+            X[0][j] = ap_int<16>(0);
+        }
+    }
+
     constexpr int input_shape_div_16 = input_shape >> 4;
+    constexpr int output_shape_div_16 = output_shape >> 4;
     int row_cycle_index = 1;
-    conv1_row_loop: for (int row = -1; row < input_shape; row++) {
+    conv1_row_loop: for (int row = -1; row < output_shape; row++) {
         // Fetch row
-        if (row < input_shape - 1) {
+        if (row < output_shape - 1) {
             conv1_fetch_row: for (int i = 0; i < input_shape_div_16;) {
                 #pragma HLS pipeline II=1 style=stp
                 if (!fifo_input.empty()) {
@@ -119,7 +129,7 @@ void conv_layer1(
 
         // Compute across row
         if (row >= 0) {
-            conv1_compute_loop: for (int col_block = 0; col_block < (input_shape >> 4); col_block++) {
+            conv1_compute_loop: for (int col_block = 0; col_block < output_shape_div_16; col_block++) {
                 #pragma HLS pipeline II=1
                 int16_v16 pkt;
                 conv1_compute_unpack: for (int cc = 0; cc < 16; cc++) {
@@ -128,8 +138,8 @@ void conv_layer1(
                     ap_int<16> sum = 0;
                     conv1_compute_kernel_row: for (int kr = 0; kr < kernel_shape; kr++) {
                         conv1_compute_kernel_col: for (int kc = 0; kc < kernel_shape; kc++) {
-                            if (!((col == 0 && kc == 0) || (col == (input_shape - 1) && kc == kernel_shape - 1) ||
-                                (row == 0 && kr == 0) || (row == (input_shape - 1) && kr == kernel_shape - 1))
+                            if (!((col == 0 && kc == 0) || (col == (output_shape - 1) && kc == kernel_shape - 1) ||
+                                (row == 0 && kr == 0) || (row == (output_shape - 1) && kr == kernel_shape - 1))
                             ) {
                                 sum += kernel[kr*kernel_shape + kc] * X[(row_cycle_index + kr)%kernel_shape][col + kc - 1];
                             }
@@ -145,7 +155,7 @@ void conv_layer1(
 
 void conv_layer2(
     tapa::istream<int16_v16>& fifo_kernel,
-    tapa::istreams<int16_v16, 2>& fifo_input,
+    tapa::istream<int16_v16>& fifo_input,
     tapa::ostream<int16_v16>& fifo_output
 ) {
     constexpr int input_shape = layer1_output_shape;
@@ -169,22 +179,32 @@ void conv_layer2(
         }
     }
 
+    // Initialize first row
+    for (int i = 0; i < input_shape; i++) {
+        #pragma HLS unroll
+        for (int j = 0; j < 16; j++) {
+            X[0][j] = ap_int<16>(0);
+        }
+    }
+
     constexpr int input_shape_div_2 = input_shape >> 1;
     constexpr int input_shape_div_16 = input_shape >> 4;
+    constexpr int input_shape_div_32 = input_shape >> 5;
     int row_cycle_index   = 1;
     int row_cycle_index_2 = 2;
     conv2_row_loop: for (int row = -1; row < input_shape_div_2; row++) {
         // Fetch row
         if (row < input_shape_div_2 - 1) {
-            conv2_fetch_row: for (int i = 0; i < input_shape_div_16;) {
+            conv2_fetch_row: for (int i = 0; i < input_shape_div_32;) {
                 #pragma HLS pipeline II=1 style=stp
-                if (!fifo_input[0].empty() && !fifo_input[1].empty()) {
-                    int16_v16 tmp0; fifo_input[0].try_read(tmp0);
-                    int16_v16 tmp1; fifo_input[1].try_read(tmp1);
+                if (!fifo_input.empty()) {
+                    int16_v16 tmp; fifo_input.try_read(tmp);
                     conv2_unpack_row: for (int j = 0; j < 16; j++) {
                         #pragma HLS unroll
-                        X[row_cycle_index  ][i*16 + j] = tmp0[j];
-                        X[row_cycle_index_2][i*16 + j] = tmp1[j];
+                        X[row_cycle_index  ][i*32 + 2*j] = tmp[j];
+                        X[row_cycle_index  ][i*32 + 2*j + 1] = tmp[j];
+                        X[row_cycle_index_2][i*32 + 2*j] = tmp[j];
+                        X[row_cycle_index_2][i*32 + 2*j + 1] = tmp[j];
                     }
                     i++;
                 }
@@ -196,7 +216,7 @@ void conv_layer2(
         // Compute across row
         if (row >= 0) {
             conv2_compute_two_rows: for (int rr = 0; rr < 2; rr++) {
-                conv2_compute_loop: for (int col_block = 0; col_block < (input_shape >> 4); col_block++) {
+                conv2_compute_loop: for (int col_block = 0; col_block < input_shape_div_16; col_block++) {
                     #pragma HLS pipeline II=1
                     int16_v16 pkt;
                     conv2_compute_unpack: for (int cc = 0; cc < 16; cc++) {
@@ -225,7 +245,7 @@ void conv_layer2(
 
 void conv_layer3(
     tapa::istream<int16_v16>& fifo_kernel,
-    tapa::istreams<int16_v16, 2>& fifo_input,
+    tapa::istream<int16_v16>& fifo_input,
     tapa::ostreams<int16_v16, 2>& fifo_output
 ) {
     constexpr int input_shape = layer2_output_shape;
@@ -247,31 +267,43 @@ void conv_layer3(
         }
     }
 
+    // Initialize first row
+    for (int i = 0; i < input_shape; i++) {
+        #pragma HLS unroll
+        for (int j = 0; j < 16; j++) {
+            X[0][j] = ap_int<16>(0);
+        }
+    }
+
     constexpr int input_shape_div_2 = input_shape >> 1;
     constexpr int input_shape_div_16 = input_shape >> 4;
+    constexpr int input_shape_div_32 = input_shape >> 5;
     int row_cycle_index = 1;
+    int row_cycle_index_2 = 2;
     conv3_row_loop: for (int row = -1; row < input_shape_div_2; row++) {
         // Fetch row
         if (row < input_shape_div_2 - 1) {
-            conv3_fetch_row: for (int i = 0; i < input_shape_div_16;) {
+            conv3_fetch_row: for (int i = 0; i < input_shape_div_32;) {
                 #pragma HLS pipeline II=1 style=stp
-                if (!fifo_input[0].empty() && !fifo_input[1].empty()) {
-                    int16_v16 tmp0; fifo_input[0].try_read(tmp0);
-                    int16_v16 tmp1; fifo_input[1].try_read(tmp1);
-                    conv3_unpack_row: for (int j = 0; j < 16; j++) {
+                if (!fifo_input.empty()) {
+                    int16_v16 tmp; fifo_input.try_read(tmp);
+                    conv2_unpack_row: for (int j = 0; j < 16; j++) {
                         #pragma HLS unroll
-                        X[row_cycle_index][i*16 + j] = tmp0[j];
-                        X[(row_cycle_index+1)%(2*kernel_shape)][i*16 + j] = tmp1[j];
+                        X[row_cycle_index  ][i*32 + 2*j] = tmp[j];
+                        X[row_cycle_index  ][i*32 + 2*j + 1] = tmp[j];
+                        X[row_cycle_index_2][i*32 + 2*j] = tmp[j];
+                        X[row_cycle_index_2][i*32 + 2*j + 1] = tmp[j];
                     }
                     i++;
                 }
             }
         }
-        row_cycle_index = (row_cycle_index + 2) % (2*kernel_shape);
+        row_cycle_index = (row_cycle_index + 2) % (kernel_shape_mul_2);
+        row_cycle_index_2 = (row_cycle_index_2 + 2) % (kernel_shape_mul_2);
 
         // Compute across row
         if (row >= 0) {
-            conv3_compute_loop: for (int col_block = 0; col_block < (input_shape >> 4); col_block++) {
+            conv3_compute_loop: for (int col_block = 0; col_block < input_shape_div_16; col_block++) {
                 #pragma HLS pipeline II=1
                 for (int rr = 0; rr < 2; rr++) {
                     int16_v16 pkt;
@@ -280,11 +312,13 @@ void conv_layer3(
                         int col = col_block*16 + cc;
                         ap_int<16> sum = 0;
                         conv3_compute_kernel_row: for (int kr = 0; kr < kernel_shape; kr++) {
+                            const int r = (row_cycle_index + 1 + rr + kr)%(kernel_shape_mul_2);
+
                             conv3_compute_kernel_col: for (int kc = 0; kc < kernel_shape; kc++) {
                                 if (!((col == 0 && kc == 0) || (col == (input_shape - 1) && kc == kernel_shape - 1) ||
                                     (row == 0 && rr == 0 && kr == 0) || (row == (input_shape_div_2 - 1) && rr == 1 && kr == kernel_shape - 1))
                                 ) {
-                                    sum += kernel[kr*kernel_shape + kc] * X[(row_cycle_index + 1 + rr + kr)%(2*kernel_shape)][col + kc - 1];
+                                    sum += kernel[kr*kernel_shape + kc] * X[r][col + kc - 1];
                                 }
                             }
                         }
@@ -321,6 +355,14 @@ void conv_layer4(
         }
     }
 
+    // Initialize first row
+    for (int i = 0; i < input_shape; i++) {
+        #pragma HLS unroll
+        for (int j = 0; j < 16; j++) {
+            X[0][j] = ap_int<16>(0);
+        }
+    }
+
     constexpr int input_shape_div_2 = input_shape >> 1;
     constexpr int input_shape_div_16 = input_shape >> 4;
     int row_cycle_index = 1;
@@ -334,18 +376,18 @@ void conv_layer4(
                         int16_v16 tmp; fifo_input.try_read(tmp);
                         conv4_unpack_row: for (int j = 0; j < 16; j++) {
                             #pragma HLS unroll
-                            X[(row_cycle_index+ii)%(2*kernel_shape)][i*16 + j] = tmp[j];
+                            X[(row_cycle_index+ii)%(kernel_shape_mul_2)][i*16 + j] = tmp[j];
                         }
                         i++;
                     }
                 }
             }
         }
-        row_cycle_index = (row_cycle_index + 2) % (2*kernel_shape);
+        row_cycle_index = (row_cycle_index + 2) % kernel_shape_mul_2;
 
         // Compute across row
         if (row >= 0) {
-            conv4_compute_loop: for (int col_block = 0; col_block < (input_shape >> 4); col_block++) {
+            conv4_compute_loop: for (int col_block = 0; col_block < input_shape_div_16; col_block++) {
                 #pragma HLS pipeline II=1
                 conv4_compute_two_rows: for (int rr = 0; rr < 2; rr++) {
                     int16_v16 pkt;
@@ -354,11 +396,12 @@ void conv_layer4(
                         int col = col_block*16 + cc;
                         ap_int<16> sum = 0;
                         conv4_compute_kernel_row: for (int kr = 0; kr < kernel_shape; kr++) {
+                            const int r = (row_cycle_index + 1 + rr + kr)%(kernel_shape_mul_2);
                             conv4_compute_kernel_col: for (int kc = 0; kc < kernel_shape; kc++) {
                                 if (!((col == 0 && kc == 0) || (col == (input_shape - 1) && kc == kernel_shape - 1) ||
                                     (row == 0 && rr == 0 && kr == 0) || (row == (input_shape_div_2 - 1) && rr == 1 && kr == kernel_shape - 1))
                                 ) {
-                                    sum += kernel[kr*kernel_shape + kc] * X[(row_cycle_index + 1 + rr + kr)%(2*kernel_shape)][col + kc - 1];
+                                    sum += kernel[kr*kernel_shape + kc] * X[r][col + kc - 1];
                                 }
                             }
                         }
@@ -503,11 +546,9 @@ void CNN4L(
 
     tapa::stream<int16_v16> fifo_conv1("fifo_conv1");
     tapa::stream<int16_v16> fifo_relu1("fifo_relu1");
-    tapa::streams<int16_v16, 2> fifo_upsample1("fifo_upsample1");
 
     tapa::stream<int16_v16> fifo_conv2("fifo_conv2");
     tapa::stream<int16_v16> fifo_relu2("fifo_relu2");
-    tapa::streams<int16_v16, 2> fifo_upsample2("fifo_upsample2");
 
     tapa::streams<int16_v16, 2> fifo_conv3("fifo_conv3");
     tapa::stream<int16_v16> fifo_maxpool3("fifo_maxpool3");
@@ -564,18 +605,12 @@ void CNN4L(
             fifo_conv1,
             fifo_relu1
         )
-        .invoke<tapa::join>(
-            upsample,
-            image_size,
-            fifo_relu1,
-            fifo_upsample1
-        )
 
         // Layer 2
         .invoke<tapa::join>(
             conv_layer2,
             fifo_kernel2,
-            fifo_upsample1,
+            fifo_relu1,
             fifo_conv2
         )
         .invoke<tapa::join>(
@@ -584,18 +619,12 @@ void CNN4L(
             fifo_conv2,
             fifo_relu2
         )
-        .invoke<tapa::join>(
-            upsample,
-            layer1_output_size,
-            fifo_relu2,
-            fifo_upsample2
-        )
 
         // Layer 3
         .invoke<tapa::join>(
             conv_layer3,
             fifo_kernel3,
-            fifo_upsample2,
+            fifo_relu2,
             fifo_conv3
         )
         .invoke<tapa::join>(

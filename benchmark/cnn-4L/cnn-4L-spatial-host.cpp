@@ -83,7 +83,7 @@ int main(int argc, char *argv[]){
     };
 
     // aligned_vector<ap_int<16>> output(image_size);
-    const int s = layer4_output_shape;
+    const int s = layer1_output_shape;
     aligned_vector<ap_int<16>> output(s*s);
     aligned_vector<int> cycle_count(1);
 
