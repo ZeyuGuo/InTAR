@@ -304,8 +304,8 @@ void conv_layer3(
         // Compute across row
         if (row >= 0) {
             conv3_compute_loop: for (int col_block = 0; col_block < input_shape_div_16; col_block++) {
-                #pragma HLS pipeline II=1
                 for (int rr = 0; rr < 2; rr++) {
+                    #pragma HLS pipeline II=1
                     int16_v16 pkt;
                     conv3_compute_unpack: for (int cc = 0; cc < 16; cc++) {
                         #pragma HLS unroll
@@ -388,8 +388,8 @@ void conv_layer4(
         // Compute across row
         if (row >= 0) {
             conv4_compute_loop: for (int col_block = 0; col_block < input_shape_div_16; col_block++) {
-                #pragma HLS pipeline II=1
                 conv4_compute_two_rows: for (int rr = 0; rr < 2; rr++) {
+                    #pragma HLS pipeline II=1
                     int16_v16 pkt;
                     conv4_compute_unpack: for (int cc = 0; cc < 16; cc++) {
                         #pragma HLS unroll
