@@ -1,0 +1,122 @@
+[tapa.sif:~/repo/LLM-InTRRA/benchmark/self-attn]$ make build_tapa
+rm -rf work.out/ build/
+mkdir -p build
+tapac \
+        -o build/solver.xilinx_u280_xdma_201920_3.hw.xo \
+        --platform xilinx_u280_xdma_201920_3 \
+        --top selfAttention \
+        --work-dir build/solver.xilinx_u280_xdma_201920_3.hw.xo.tapa \
+        --connectivity hbm_config.ini \
+        --enable-hbm-binding-adjustment \
+        --enable-synth-util \
+        --run-floorplan-dse \
+        --max-parallel-synth-jobs 16 \
+        --floorplan-output build/solver.tcl \
+        self-attn-intrra-kernel.cpp
+I1221 22:25:43.538 tapa.util:184] logging level set to INFO
+I1221 22:25:43.539 tapa.tapac:514] running translated command: `tapa dse-floorplan --input=self-attn-intrra-kernel.cpp --top=selfAttention --platform=xilinx_u280_xdma_201920_3 --connectivity=hbm_config.ini --enable-synth-util --enable-hbm-binding-adjustment --max-parallel-synth-jobs=16 --floorplan-output=build/solver.tcl --output=build/solver.xilinx_u280_xdma_201920_3.hw.xo --bitstream-script=build/solver.xilinx_u280_xdma_201920_3.hw_generate_bitstream.sh`
+I1221 22:25:43.540 tapa.util:184] logging level set to INFO
+I1221 22:25:43.541 tapa.tapa:54] tapa version: 0.0.20240301.1
+I1221 22:25:43.541 tapa.tapa:58] Python recursion limit set to 3000
+I1221 22:25:43.542 tapa.steps.dse:98] 
+I1221 22:25:43.542 tapa.steps.dse:99] --------------------------------------------------------------------------------
+I1221 22:25:43.542 tapa.steps.dse:100] DSE preparation: synthesize each task into RTL
+I1221 22:25:43.542 tapa.steps.dse:101] --------------------------------------------------------------------------------
+I1221 22:25:43.542 tapa.steps.dse:102] 
+I1221 22:25:43.635 tapa.steps.analyze:151] added vendor include path `/mnt/software/xilinx/Vitis_HLS/2021.2/include`
+I1221 22:25:43.635 tapa.steps.analyze:248] Running tapacc command: /usr/local/bin/tapacc /home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/csynth/flatten/flatten-774640ea-self-attn-intrra-kernel.cpp -top selfAttention -- -std=c++17 -I /usr/local/lib/python3.10/dist-packages/tapa/../../../src -isystem /mnt/software/xilinx/Vitis_HLS/2021.2/include -stdlib=libc++ -isystem /usr/lib/llvm-17/include/c++/v1/ -isystem /usr/include/clang/17/include/ -isystem /usr/lib/clang/17/include/
+I1221 22:25:56.144 tapa.steps.common:92] writing TAPA graph to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/csynth/graph.json`.
+I1221 22:25:56.147 tapa.steps.common:92] writing TAPA settings to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/csynth/settings.json`.
+I1221 22:25:56.536 tapa.steps.common:46] reusing TAPA settings from upstream flows.
+I1221 22:25:56.572 tapa.core:182] extracting HLS C++ files
+I1221 22:25:56.595 tapa.core:214] running HLS
+I1221 22:25:56.601 tapa.core:260] spawn 10 workers for parallel HLS synthesis of the tasks
+I1221 22:48:09.778 tapa.core:275] extracting RTL files
+I1221 22:48:10.544 tapa.core:306] parsing RTL files and populating tasks
+I1221 22:48:11.889 tapa.core:323] instrumenting upper-level RTL
+I1221 22:48:11.889 tapa.steps.common:92] writing TAPA settings to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/csynth/settings.json`.
+I1221 22:48:11.965 tapa.steps.dse:98] 
+I1221 22:48:11.965 tapa.steps.dse:99] --------------------------------------------------------------------------------
+I1221 22:48:11.965 tapa.steps.dse:100] Start generating design point 1 with --max-slr-width-limit 15000
+I1221 22:48:11.965 tapa.steps.dse:101] --------------------------------------------------------------------------------
+I1221 22:48:11.965 tapa.steps.dse:102] 
+I1221 22:48:12.719 tapa.steps.common:46] reusing TAPA settings from upstream flows.
+W1221 22:48:12.719 tapa.steps.optimize:151] HBM port binding adjustment is enabled. The final binding may be different from hbm_config.ini
+I1221 22:48:12.719 tapa.floorplan:437] generating post-synthesis resource utilization reports
+I1221 22:48:12.719 tapa.floorplan:438] this step runs logic synthesis of each task for accurate area info, it may take a while
+I1221 22:48:12.722 tapa.floorplan:442] spawn 10 workers for parallel logic synthesis. use --max-parallel-synth-jobs to enable more workers.
+I1221 22:49:59.380 tapa.core:358] Running floorplanning
+W1221 22:49:59.382 tapa.task_graph:75] cycle_count is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1221 22:49:59.382 tapa.task_graph:75] W_acc0 is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1221 22:49:59.383 tapa.task_graph:75] W_acc1 is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1221 22:49:59.383 tapa.task_graph:75] X_acc0 is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1221 22:49:59.383 tapa.task_graph:75] X_acc1 is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1221 22:49:59.383 tapa.task_graph:75] acc0_out is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1221 22:49:59.383 tapa.task_graph:75] acc1_out is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+
+*********************************************
+***         Starting AutoBridge           ***
+*********************************************
+
+Version: 0.0.20220512.dev1
+
+Running details logged to /home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/run-1/run/autobridge-Dec-21-2024-22:49.log
+
+----------------------------------------------
+
+*** CRITICAL WARNING: Gurobi solver not detected. Floorplanning may take extra time. 
+The Gurobi solver is much faster than the open-source solver, and it is free for academia. 
+  - Register and download the Gurobi Optimizer at https://www.gurobi.com/downloads/gurobi-optimizer-eula/
+  - Unzip the package to your desired directory
+  - Obtain an academic license at https://www.gurobi.com/downloads/end-user-license-agreement-academic/
+  - Set environment variables GUROBI_HOME and GRB_LICENSE_FILE
+      export GUROBI_HOME=[WHERE-YOU-INSTALL] 
+      export GRB_LICENSE_FILE=[ADDRESS-OF-YOUR-LICENSE-FILE] 
+      export PATH="${PATH}:${GUROBI_HOME}/bin" 
+      export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${GUROBI_HOME}/lib" 
+
+Generate task graph visualization in graphviz format: /home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/run-1/run/task_graph.dot
+
+Floorplan parameters:
+
+  floorplan_strategy: HALF_SLR_LEVEL_FLOORPLANNING
+  threshold for switching to iterative partitioning: 200
+  floorplan_opt_priority: AREA_PRIORITIZED
+  min_area_limit: 0.650000
+  max_area_limit: 0.850000
+  min_slr_width_limit: 10000
+  max_slr_width_limit: 15000
+  max_search_time per solving: 600
+
+Start floorplanning, please check the log for the progress...
+
+The total area of the design:
+  BRAM: 639 / 3504 = 18.2%
+  DSP: 43 / 8496 = 0.5%
+  FF: 58106 / 2331840 = 2.5%
+  LUT: 52611.9375 / 1165920 = 4.5%
+  URAM: 24 / 960 = 2.5%
+
+total wire length: 1104
+SLR boundary 0 - 1 has 0 crossings
+SLR boundary 1 - 2 has 0 crossings
+SLR boundary 2 - 3 has 0 crossings
+Failed to balance reconvergent paths at loop level. Most likely there is a loop of streams.
+Floorplan finishes
+
++--------------------+----------+---------+--------+---------+----------+
+|     Slot Name      | BRAM (%) | DSP (%) | FF (%) | LUT (%) | URAM (%) |
++--------------------+----------+---------+--------+---------+----------+
+| CR_X0Y0_To_CR_X3Y3 |   49.9   |   1.9   |  8.0   |   14.5  |   12.5   |
+| CR_X4Y0_To_CR_X7Y3 |   59.3   |   1.2   |  6.3   |   11.4  |   4.2    |
++--------------------+----------+---------+--------+---------+----------+
+
+The device could be partitioned into 2 slots.
+
+The number of wires between slots are:
+
+CR_X0Y0_To_CR_X3Y3 <--> CR_X4Y0_To_CR_X7Y3 : 276
+
+*********************************************
+***          AutoBridge Finishes          ***
+*********************************************

@@ -48,7 +48,7 @@ int main(int argc, char *argv[]){
 
     srand((unsigned)time(nullptr));
 
-    // Example input matrix (8x8)
+    // Example input matrix (8x8), flattened to 1D array
     aligned_vector<ap_int<16>> input(image_size);
     for (int i = 0; i < image_shape; ++i) {
         for (int j = 0; j < image_shape; ++j) {
