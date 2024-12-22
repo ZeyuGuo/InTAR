@@ -233,8 +233,8 @@ void CC1_Conv2_Conv4(
 
     ap_int<16> X[kernel_shape_mul_2][input_shape];
     ap_int<16> kernel[16];
+    #pragma HLS array_partition variable=X cyclic dim=2 factor=32
     #pragma HLS array_partition variable=X complete dim=1
-    #pragma HLS array_partition variable=X complete dim=2
     #pragma HLS array_partition variable=kernel complete
     
     int16_v16 tmp = fifo_kernel.read();
@@ -260,6 +260,7 @@ void CC1_Conv2_Conv4(
         if (row < input_shape_div_2 - 1) {
             conv2_fetch_row: for (int i = 0; i < input_shape_div_32;) {
                 #pragma HLS pipeline II=1 style=stp
+                #pragma HLS dependence variable=X false
                 if (!fifo_input[0].empty() && !fifo_input[1].empty()) {
                     int16_v32 tmp0; fifo_input[0].try_read(tmp0);
                     int16_v32 tmp1; fifo_input[1].try_read(tmp1);
@@ -372,6 +373,7 @@ void CC2_Conv3_Conv4(
     ap_int<16> X[2*kernel_shape][input_shape];
     ap_int<16> kernel[16];
     #pragma HLS array_partition variable=X cyclic dim=2 factor=32
+    #pragma HLS array_partition variable=X complete dim=1
     #pragma HLS array_partition variable=kernel complete
 
     int16_v16 tmp = fifo_kernel.read();
@@ -396,6 +398,7 @@ void CC2_Conv3_Conv4(
         if (row < input_shape_div_2 - 1) {
             conv3_fetch_row: for (int i = 0; i < input_shape_div_32;) {
                 #pragma HLS pipeline II=1 style=stp
+                #pragma HLS dependence variable=X false
                 if (!fifo_input[0].empty() && !fifo_input[1].empty()) {
                     int16_v32 tmp0; fifo_input[0].try_read(tmp0);
                     int16_v32 tmp1; fifo_input[1].try_read(tmp1);
@@ -417,12 +420,12 @@ void CC2_Conv3_Conv4(
                     #pragma HLS pipeline II=1
 
                     int16_v16 pkt;
-                    conv3_compute_unpack: for (int cc = 0; cc < 16; cc++) {
+                    for (int cc = 0; cc < 16; cc++) {
                         #pragma HLS unroll
                         int col = col_block*16 + cc;
                         ap_int<16> sum = 0;
-                        conv3_compute_kernel_row: for (int kr = 0; kr < kernel_shape; kr++) {
-                            conv3_compute_kernel_col: for (int kc = 0; kc < kernel_shape; kc++) {
+                        for (int kr = 0; kr < kernel_shape; kr++) {
+                            for (int kc = 0; kc < kernel_shape; kc++) {
                                 if (!((col == 0 && kc == 0) || (col == (input_shape - 1) && kc == kernel_shape - 1) ||
                                     (row == 0 && rr == 0 && kr == 0) || (row == (input_shape_div_2 - 1) && rr == 1 && kr == kernel_shape - 1))
                                 ) {
@@ -499,6 +502,7 @@ void central_mem(
     ap_int<16> X[layer3_output_shape][layer3_output_shape];
     #pragma HLS array_partition variable=X cyclic factor=16 dim=2
     #pragma HLS array_partition variable=X cyclic factor=3 dim=1
+    #pragma HLS bind_storage variable=X type=ram_2p impl=uram
 
     for(int i = 0; i < layer3_output_shape; i++){
         for(int j = 0; j < (layer3_output_shape >> 4);){
@@ -584,11 +588,8 @@ void maxpool(
     tapa::ostream<int16_v16>& fifo_output
 ) {
     maxpool_loop: for (;;) {
-        int16_v16 pkt;
-        for (int j = 0; j < 16; j++) {
-            #pragma HLS unroll
-            pkt[j] = ap_int<16>(0);
-        }
+        ap_int<16> pkt[16];
+        #pragma HLS array_partition variable=pkt complete
         maxpool_xvec: for (int j = 0; j < 2;) {
             #pragma HLS pipeline II=1 style=stp
             if(!fifo_input[0].empty() && !fifo_input[1].empty()){
@@ -596,19 +597,20 @@ void maxpool(
                 int16_v16 tmp1; fifo_input[1].try_read(tmp1);
                 maxpool_x: for (int k = 0; k < 8; k++) {
                     #pragma HLS unroll
-                    ap_int<16> old = pkt[j*8 + k];
-                    // Max across horizontal
-                    maxpool_max_x: for (int kk = 0; kk < 2; kk++) {
-                        // Max across vertical
-                        ap_int<16> data = tmp0[2*k + kk] > tmp1[2*k + kk] ? tmp0[2*k + kk] : tmp1[2*k + kk];
-                        old = data > old ? data : old;
-                    }
-                    pkt[j*8 + k] = old;
+                    ap_int<16> a = (tmp0[2*k] > tmp1[2*k]) ? tmp0[2*k] : tmp1[2*k];
+                    ap_int<16> b = (tmp0[2*k + 1] > tmp1[2*k + 1]) ? tmp0[2*k + 1] : tmp1[2*k + 1];
+                    ap_int<16> fin_d = (a > b) ? a : b;
+                    pkt[j*8 + k] = fin_d;
                 }
                 j++;
             }
         }
-        fifo_output.write(pkt);
+        int16_v16 send;
+        for(int i = 0; i < 16; i++){
+            #pragma HLS unroll
+            send[i] = pkt[i];
+        }
+        fifo_output.write(send);
     }
 }
 
