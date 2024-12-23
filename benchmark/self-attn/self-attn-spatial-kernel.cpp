@@ -1,20 +1,23 @@
 #include <iostream>
-#include <vector>
-#include <cmath>
-#include <numeric>
+// #include <vector>
+// #include <cmath>
+// #include <numeric>
 #include <ap_int.h>
 #include <tapa.h>
-#include <bits/stdc++.h>
+// #include <bits/stdc++.h>
 
 using namespace std;
 
-constexpr int seq_len = 256;
-constexpr int D = 1024;
+// #define seq_len 256
+// #define D 1024
 // constexpr int norm = sqrt(D);
 
+#define seq_len 32
+#define D 128
+
 typedef ap_int<16> type_t;
-using int16_vD = tapa::vec_t<ap_int<16>, D>;
-using int16_vL = tapa::vec_t<ap_int<16>, seq_len>;
+typedef tapa::vec_t<ap_int<16>, D> int16_vD;
+typedef tapa::vec_t<ap_int<16>, seq_len> int16_vL;
 
 // Kernel
 void read_input_input(const int input_size,
@@ -269,11 +272,11 @@ void transpose(
 
 // Self-attention computation
 void selfAttention(
-    tapa::mmap<int16_vL> input,
+    tapa::mmap<int16_vL> top_input,
     tapa::mmap<int16_vD> Wq, 
     tapa::mmap<int16_vD> Wk, 
     tapa::mmap<int16_vD> Wv, 
-    tapa::mmap<int16_vD> output
+    tapa::mmap<int16_vD> top_output
 ) {
 
     tapa::stream<int16_vL> fifo_input_Wq("fifo_input_Wq");
@@ -293,7 +296,7 @@ void selfAttention(
 
     // Step 1: Compute Query, Key, and Value matrices
     tapa::task()
-        .invoke<tapa::join>(read_input_input, seq_len, input, fifo_input_Wq, fifo_input_Wk, fifo_input_Wv)
+        .invoke<tapa::join>(read_input_input, seq_len, top_input, fifo_input_Wq, fifo_input_Wk, fifo_input_Wv)
         .invoke<tapa::join>(read_input_weights, D, Wq, fifo_Wq)  // read Wq
         .invoke<tapa::join>(read_input_weights, D, Wk, fifo_Wk)  // read Wk
         .invoke<tapa::join>(read_input_weights, D, Wv, fifo_Wv)  // read Wv
@@ -303,6 +306,6 @@ void selfAttention(
         .invoke<tapa::join>(matMul_qk, fifo_Q, fifo_K, fifo_QK)
         .invoke<tapa::join>(transpose, fifo_V, fifo_VT)
         .invoke<tapa::join>(matMul_v, fifo_QK, fifo_VT, fifo_output)
-        .invoke<tapa::join>(write_mtx, output, fifo_output);
+        .invoke<tapa::join>(write_mtx, top_output, fifo_output);
 }
 
