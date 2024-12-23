@@ -106,116 +106,75 @@ void CC0_Conv1_Conv4(
     #pragma HLS array_partition variable=X cyclic dim=2 factor=32
     #pragma HLS array_partition variable=kernel complete
 
-    constexpr int input_shape = image_shape;
-    constexpr int input_shape_div_16 = image_shape >> 4;
+    for(int st = 0; st < 2; st++){
 
-    int16_v16 tmp = fifo_kernel.read();
-    for(int j = 0; j < 16; j++){
-        #pragma HLS unroll
-        kernel[j] = tmp[j];
-    }
+        const int row_bound = (st == 0) ? image_shape : 150;
+        const int col_bound = (st == 0) ? image_shape : layer3_output_shape;
+        const int fetch_bound = (col_bound >> 4);
 
-    // initialize
-    for(int i = 0; i < (image_shape >> 5); i++){
-        #pragma HLS pipeline II=1
-        for(int j = 0; j < 32; j++){
+        int16_v16 tmp = fifo_kernel.read();
+        for(int j = 0; j < 16; j++){
             #pragma HLS unroll
-            X[0][i*32+j] = 0;
+            kernel[j] = tmp[j];
         }
-    }
 
-    int row_cycle_index = 1;
-    conv1_row_loop: for (int row = -1; row < input_shape; row++) {
-        // Fetch row
-        if (row < input_shape - 1) {
-            conv1_fetch_row: for (int i = 0; i < input_shape_div_16;) {
-                #pragma HLS pipeline II=1 style=stp
-                if (!fifo_input.empty()) {
-                    int16_v16 tmp; fifo_input.try_read(tmp);
+        if(st == 0){
+            // initialize
+            for(int i = 0; i < (image_shape >> 5); i++){
+                #pragma HLS pipeline II=1
+                for(int j = 0; j < 32; j++){
+                    #pragma HLS unroll
+                    X[0][i*32+j] = 0;
+                }
+            }
+        }
+
+        int row_cycle_index = 1;
+        for (int row = -1; row < row_bound; row++) {
+            // Fetch row
+            if (row < row_bound - 1) {
+                for (int i = 0; i < fetch_bound; i++) {
+                    #pragma HLS pipeline II=1 style=stp
+                    int16_v16 tmp;
+                    if(st == 0){
+                        tmp = fifo_input.read();
+                    } else {
+                        tmp = fifo_from_ctrl.read();
+                    }
                     conv1_unpack_row: for (int j = 0; j < 16; j++) {
                         #pragma HLS unroll
                         X[row_cycle_index][i*16 + j] = tmp[j];
                     }
-                    i++;
                 }
             }
-        }
-        row_cycle_index = (row_cycle_index + 1) % kernel_shape;
+            row_cycle_index = (row_cycle_index + 1) % kernel_shape;
 
-        // Compute across row
-        if (row >= 0) {
-            conv1_compute_loop: for (int col_block = 0; col_block < (input_shape >> 4); col_block++) {
-                #pragma HLS pipeline II=1
-                int16_v16 pkt;
-                conv1_compute_unpack: for (int cc = 0; cc < 16; cc++) {
-                    #pragma HLS unroll
-                    int col = col_block*16 + cc;
-                    ap_int<16> sum = 0;
-                    conv1_compute_kernel_row: for (int kr = 0; kr < kernel_shape; kr++) {
-                        conv1_compute_kernel_col: for (int kc = 0; kc < kernel_shape; kc++) {
-                            if (!((col == 0 && kc == 0) || (col == (input_shape - 1) && kc == kernel_shape - 1) ||
-                                (row == 0 && kr == 0) || (row == (input_shape - 1) && kr == kernel_shape - 1))
-                            ) {
-                                sum += kernel[kr*kernel_shape + kc] * X[(row_cycle_index + kr)%kernel_shape][col + kc - 1];
-                            }
-                        }
-                    }
-                    pkt[cc] = sum;
-                }
-                fifo_to_CC1.write(pkt);
-            }
-        }
-    }
-
-    int16_v16 tmp_2 = fifo_kernel.read();
-    for(int j = 0; j < 16; j++){
-        #pragma HLS unroll
-        kernel[j] = tmp_2[j];
-    }
-
-    constexpr int row_count = 150;
-    constexpr int col_count = layer3_output_shape;
-    constexpr int col_count_div_16 = col_count / 16;
-
-    row_cycle_index = 1;
-    for (int row = -1; row < row_count; row++) {
-        // Fetch row
-        if (row < row_count - 1) {
-            for (int i = 0; i < col_count_div_16;) {
-                #pragma HLS pipeline II=1 style=stp
-                if (!fifo_from_ctrl.empty()) {
-                    int16_v16 tmp; fifo_from_ctrl.try_read(tmp);
-                    for (int j = 0; j < 16; j++) {
+            // Compute across row
+            if (row >= 0) {
+                conv1_compute_loop: for (int col_block = 0; col_block < (col_bound >> 4); col_block++) {
+                    #pragma HLS pipeline II=1
+                    int16_v16 pkt;
+                    conv1_compute_unpack: for (int cc = 0; cc < 16; cc++) {
                         #pragma HLS unroll
-                        X[row_cycle_index][i*16 + j] = tmp[j];
-                    }
-                    i++;
-                }
-            }
-        }
-        row_cycle_index = (row_cycle_index + 1) % kernel_shape;
-
-        // Compute across row
-        if (row >= 0) {
-            for (int col_block = 0; col_block < (col_count >> 4); col_block++) {
-                #pragma HLS pipeline II=1
-                int16_v16 pkt;
-                for (int cc = 0; cc < 16; cc++) {
-                    #pragma HLS unroll
-                    int col = col_block*16 + cc;
-                    ap_int<16> sum = 0;
-                    for (int kr = 0; kr < kernel_shape; kr++) {
-                        for (int kc = 0; kc < kernel_shape; kc++) {
-                            if (!((col == 0 && kc == 0) || (col == (col_count - 1) && kc == kernel_shape - 1) ||
-                                (row == 0 && kr == 0) || (row == (row_count - 1) && kr == kernel_shape - 1))
-                            ) {
-                                sum += kernel[kr*kernel_shape + kc] * X[(row_cycle_index + kr)%kernel_shape][col + kc - 1];
+                        int col = col_block*16 + cc;
+                        ap_int<16> sum = 0;
+                        conv1_compute_kernel_row: for (int kr = 0; kr < kernel_shape; kr++) {
+                            conv1_compute_kernel_col: for (int kc = 0; kc < kernel_shape; kc++) {
+                                if (!((col == 0 && kc == 0) || (col == (col_bound - 1) && kc == kernel_shape - 1) ||
+                                    (row == 0 && kr == 0) || (row == (row_bound - 1) && kr == kernel_shape - 1))
+                                ) {
+                                    sum += kernel[kr*kernel_shape + kc] * X[(row_cycle_index + kr)%kernel_shape][col + kc - 1];
+                                }
                             }
                         }
+                        pkt[cc] = sum;
                     }
-                    pkt[cc] = sum;
+                    if(st == 0){
+                        fifo_to_CC1.write(pkt);
+                    } else {
+                        fifo_output.write(pkt);
+                    }
                 }
-                fifo_output.write(pkt);
             }
         }
     }
@@ -229,132 +188,104 @@ void CC1_Conv2_Conv4(
     tapa::istream<int16_v16>& fifo_from_ctrl,
     tapa::ostream<int16_v16>& fifo_output
 ){
-    constexpr int input_shape = layer1_output_shape;
 
-    ap_int<16> X[kernel_shape_mul_2][input_shape];
+    ap_int<16> X[kernel_shape_mul_2][layer1_output_shape];
     ap_int<16> kernel[16];
     #pragma HLS array_partition variable=X cyclic dim=2 factor=32
     #pragma HLS array_partition variable=X complete dim=1
     #pragma HLS array_partition variable=kernel complete
-    
-    int16_v16 tmp = fifo_kernel.read();
-    for(int j = 0; j < 16; j++){
-        #pragma HLS unroll
-        kernel[j] = tmp[j];
-    }
 
-    for(int i = 0; i < (input_shape >> 5); i++){
-        #pragma HLS pipeline II=1
-        for(int j = 0; j < 32; j++){
+    for(int st = 0; st < 2; st++){
+
+        const int row_bound = (st == 0) ? (layer1_output_shape / 2) : 150;
+        const int col_bound = (st == 0) ? layer1_output_shape : layer3_output_shape;
+        const int fetch_bound = (st == 0) ? (layer1_output_shape >> 5) : (layer3_output_shape >> 4);
+        const int rr_bound = (st == 0) ? 2 : 1;
+
+        int16_v16 tmp = fifo_kernel.read();
+        for(int j = 0; j < 16; j++){
             #pragma HLS unroll
-            X[0][i*32+j] = 0;
+            kernel[j] = tmp[j];
         }
-    }
 
-    constexpr int input_shape_div_2 = input_shape >> 1;
-    constexpr int input_shape_div_32 = input_shape >> 5;
-    int row_cycle_index   = 1;
-    int row_cycle_index_2 = 2;
-    conv2_row_loop: for (int row = -1; row < input_shape_div_2; row++) {
-        // Fetch row
-        if (row < input_shape_div_2 - 1) {
-            conv2_fetch_row: for (int i = 0; i < input_shape_div_32;) {
-                #pragma HLS pipeline II=1 style=stp
-                #pragma HLS dependence variable=X false
-                if (!fifo_input[0].empty() && !fifo_input[1].empty()) {
-                    int16_v32 tmp0; fifo_input[0].try_read(tmp0);
-                    int16_v32 tmp1; fifo_input[1].try_read(tmp1);
-                    conv2_unpack_row: for (int j = 0; j < 32; j++) {
-                        #pragma HLS unroll
-                        X[row_cycle_index  ][i*32 + j] = tmp0[j];
-                        X[row_cycle_index_2][i*32 + j] = tmp1[j];
-                    }
-                    i++;
+        if(st == 0){
+            for(int i = 0; i < (col_bound >> 5); i++){
+                #pragma HLS pipeline II=1
+                for(int j = 0; j < 32; j++){
+                    #pragma HLS unroll
+                    X[0][i*32+j] = 0;
                 }
             }
         }
-        row_cycle_index   = (row_cycle_index + 2)   % (kernel_shape_mul_2);
-        row_cycle_index_2 = (row_cycle_index_2 + 2) % (kernel_shape_mul_2);
 
-        // Compute across row
-        if (row >= 0) {
-            conv2_compute_two_rows: for (int rr = 0; rr < 2; rr++) {
-                conv2_compute_loop: for (int col_block = 0; col_block < (input_shape >> 4); col_block++) {
-                    #pragma HLS pipeline II=1
-                    int16_v16 pkt;
-                    conv2_compute_unpack: for (int cc = 0; cc < 16; cc++) {
-                        #pragma HLS unroll
-                        int col = col_block*16 + cc;
-                        ap_int<16> sum = 0;
-                        conv2_compute_kernel_row: for (int kr = 0; kr < kernel_shape; kr++) {
-                            const int r = (row_cycle_index + 1 + rr + kr)%(kernel_shape_mul_2);
+        int row_cycle_index   = 1;
+        int row_cycle_index_2 = 2;
+        for (int row = -1; row < row_bound; row++) {
+            // Fetch row
+            if (row < row_bound - 1) {
+                if(st == 0) {
+                    for (int i = 0; i < fetch_bound;) {
+                        #pragma HLS pipeline II=1 style=stp
+                        #pragma HLS dependence variable=X false
+                        if (!fifo_input[0].empty() && !fifo_input[1].empty()) {
+                            int16_v32 tmp0; fifo_input[0].try_read(tmp0);
+                            int16_v32 tmp1; fifo_input[1].try_read(tmp1);
+                            conv2_unpack_row: for (int j = 0; j < 32; j++) {
+                                #pragma HLS unroll
+                                X[row_cycle_index  ][i*32 + j] = tmp0[j];
+                                X[row_cycle_index_2][i*32 + j] = tmp1[j];
+                            }
+                            i++;
+                        }
+                    }
+                } else {
+                    conv1_fetch_row: for (int i = 0; i < fetch_bound;) {
+                        #pragma HLS pipeline II=1 style=stp
+                        if (!fifo_from_ctrl.empty()) {
+                            int16_v16 tmp; fifo_from_ctrl.try_read(tmp);
+                            conv1_unpack_row: for (int j = 0; j < 16; j++) {
+                                #pragma HLS unroll
+                                X[row_cycle_index][i*16 + j] = tmp[j];
+                            }
+                            i++;
+                        }
+                    }
+                }
+            }
+            row_cycle_index   = (st == 0) ? ((row_cycle_index + 2) % kernel_shape_mul_2) : ((row_cycle_index + 1) % kernel_shape);
+            row_cycle_index_2 = (row_cycle_index_2 + 2) % (kernel_shape_mul_2);
 
-                            conv2_compute_kernel_col: for (int kc = 0; kc < kernel_shape; kc++) {
-                                if (!((col == 0 && kc == 0) || (col == (input_shape - 1) && kc == kernel_shape - 1) ||
-                                    (row == 0 && rr == 0 && kr == 0) || (row == (input_shape_div_2 - 1) && rr == 1 && kr == kernel_shape - 1))
-                                ) {
-                                    sum += kernel[kr*kernel_shape + kc] * X[r][col + kc - 1];
+            // Compute across row
+            if (row >= 0) {
+                for (int rr = 0; rr < rr_bound; rr++) {
+                    bool check_st = (rr == 1 || st == 1);
+                    conv2_compute_loop: for (int col_block = 0; col_block < (col_bound >> 4); col_block++) {
+                        #pragma HLS pipeline II=1
+                        int16_v16 pkt;
+                        conv2_compute_unpack: for (int cc = 0; cc < 16; cc++) {
+                            #pragma HLS unroll
+                            int col = col_block*16 + cc;
+                            ap_int<16> sum = 0;
+                            conv2_compute_kernel_row: for (int kr = 0; kr < kernel_shape; kr++) {
+                                const int r = (st == 0) ? ((row_cycle_index + 1 + rr + kr)%kernel_shape_mul_2) : ((row_cycle_index + kr)%kernel_shape);
+
+                                conv2_compute_kernel_col: for (int kc = 0; kc < kernel_shape; kc++) {
+                                    if (!((col == 0 && kc == 0) || (col == (col_bound - 1) && kc == kernel_shape - 1) ||
+                                        (row == 0 && rr == 0 && kr == 0) || (row == (row_bound - 1) && check_st && kr == kernel_shape - 1))
+                                    ) {
+                                        sum += kernel[kr*kernel_shape + kc] * X[r][col + kc - 1];
+                                    }
                                 }
                             }
+                            pkt[cc] = sum;
                         }
-                        pkt[cc] = sum;
-                    }
-                    fifo_to_CC2.write(pkt);
-                }
-            }
-        }
-    }
-
-
-    int16_v16 tmp_2 = fifo_kernel.read();
-    for(int j = 0; j < 16; j++){
-        #pragma HLS unroll
-        kernel[j] = tmp_2[j];
-    }
-
-    constexpr int row_count = 150;
-    constexpr int col_count = layer3_output_shape;
-    constexpr int col_count_div_16 = col_count / 16;
-
-    row_cycle_index = 1;
-    for (int row = -1; row < row_count; row++) {
-        // Fetch row
-        if (row < row_count - 1) {
-            conv1_fetch_row: for (int i = 0; i < col_count_div_16;) {
-                #pragma HLS pipeline II=1 style=stp
-                if (!fifo_from_ctrl.empty()) {
-                    int16_v16 tmp; fifo_from_ctrl.try_read(tmp);
-                    conv1_unpack_row: for (int j = 0; j < 16; j++) {
-                        #pragma HLS unroll
-                        X[row_cycle_index][i*16 + j] = tmp[j];
-                    }
-                    i++;
-                }
-            }
-        }
-        row_cycle_index = (row_cycle_index + 1) % kernel_shape;
-
-        // Compute across row
-        if (row >= 0) {
-            for (int col_block = 0; col_block < (col_count >> 4); col_block++) {
-                #pragma HLS pipeline II=1
-                int16_v16 pkt;
-                for (int cc = 0; cc < 16; cc++) {
-                    #pragma HLS unroll
-                    int col = col_block*16 + cc;
-                    ap_int<16> sum = 0;
-                    for (int kr = 0; kr < kernel_shape; kr++) {
-                        for (int kc = 0; kc < kernel_shape; kc++) {
-                            if (!((col == 0 && kc == 0) || (col == (col_count - 1) && kc == kernel_shape - 1) ||
-                                (row == 0 && kr == 0) || (row == (row_count - 1) && kr == kernel_shape - 1))
-                            ) {
-                                sum += kernel[kr*kernel_shape + kc] * X[(row_cycle_index + kr)%kernel_shape][col + kc - 1];
-                            }
+                        if(st == 0){
+                            fifo_to_CC2.write(pkt);
+                        } else {
+                            fifo_output.write(pkt);
                         }
                     }
-                    pkt[cc] = sum;
                 }
-                fifo_output.write(pkt);
             }
         }
     }
@@ -368,128 +299,104 @@ void CC2_Conv3_Conv4(
     tapa::istream<int16_v16>& fifo_from_ctrl,
     tapa::ostream<int16_v16>& fifo_output
 ){
-    constexpr int input_shape = layer2_output_shape;
 
-    ap_int<16> X[2*kernel_shape][input_shape];
+    ap_int<16> X[2*kernel_shape][layer2_output_shape];
     ap_int<16> kernel[16];
     #pragma HLS array_partition variable=X cyclic dim=2 factor=32
     #pragma HLS array_partition variable=X complete dim=1
     #pragma HLS array_partition variable=kernel complete
 
-    int16_v16 tmp = fifo_kernel.read();
-    for(int j = 0; j < 16; j++){
-        #pragma HLS unroll
-        kernel[j] = tmp[j];
-    }
 
-    for(int i = 0; i < (input_shape >> 5); i++){
-        #pragma HLS pipeline II=1
-        for(int j = 0; j < 32; j++){
+    for(int st = 0; st < 2; st++) {
+
+        const int row_bound = (st == 0) ? (layer2_output_shape / 2) : 150;
+        const int col_bound = (st == 0) ? layer2_output_shape : layer3_output_shape;
+        const int fetch_bound = (st == 0) ? (layer2_output_shape >> 5) : (layer3_output_shape >> 4);
+        const int rr_bound = (st == 0) ? 2 : 1;
+
+        int16_v16 tmp = fifo_kernel.read();
+        for(int j = 0; j < 16; j++){
             #pragma HLS unroll
-            X[0][i*32+j] = 0;
+            kernel[j] = tmp[j];
         }
-    }
 
-    constexpr int input_shape_div_2 = input_shape >> 1;
-    constexpr int input_shape_div_32 = input_shape >> 5;
-    int row_cycle_index = 1;
-    conv3_row_loop: for (int row = -1; row < input_shape_div_2; row++) {
-        // Fetch row
-        if (row < input_shape_div_2 - 1) {
-            conv3_fetch_row: for (int i = 0; i < input_shape_div_32;) {
-                #pragma HLS pipeline II=1 style=stp
-                #pragma HLS dependence variable=X false
-                if (!fifo_input[0].empty() && !fifo_input[1].empty()) {
-                    int16_v32 tmp0; fifo_input[0].try_read(tmp0);
-                    int16_v32 tmp1; fifo_input[1].try_read(tmp1);
-                    for (int j = 0; j < 32; j++) {
-                        #pragma HLS unroll
-                        X[row_cycle_index][i*32 + j] = tmp0[j];
-                        X[(row_cycle_index+1)%(2*kernel_shape)][i*32 + j] = tmp1[j];
-                    }
-                    i++;
+        if(st == 0){
+            for(int i = 0; i < (col_bound >> 5); i++){
+                #pragma HLS pipeline II=1
+                for(int j = 0; j < 32; j++){
+                    #pragma HLS unroll
+                    X[0][i*32+j] = 0;
                 }
             }
         }
-        row_cycle_index = (row_cycle_index + 2) % (2*kernel_shape);
 
-        // Compute across row
-        if (row >= 0) {
-            conv3_compute_loop: for (int col_block = 0; col_block < (input_shape >> 4); col_block++) {
-                for (int rr = 0; rr < 2; rr++) {
-                    #pragma HLS pipeline II=1
+        int row_cycle_index = 1;
+        conv3_row_loop: for (int row = -1; row < row_bound; row++) {
+            // Fetch row
+            if (row < row_bound - 1) {
+                if(st == 0){
+                    for (int i = 0; i < fetch_bound;) {
+                        #pragma HLS pipeline II=1 style=stp
+                        #pragma HLS dependence variable=X false
+                        if (!fifo_input[0].empty() && !fifo_input[1].empty()) {
+                            int16_v32 tmp0; fifo_input[0].try_read(tmp0);
+                            int16_v32 tmp1; fifo_input[1].try_read(tmp1);
+                            for (int j = 0; j < 32; j++) {
+                                #pragma HLS unroll
+                                X[row_cycle_index][i*32 + j] = tmp0[j];
+                                X[(row_cycle_index+1)%(kernel_shape_mul_2)][i*32 + j] = tmp1[j];
+                            }
+                            i++;
+                        }
+                    }
+                } else {
+                    conv1_fetch_row: for (int i = 0; i < fetch_bound;) {
+                        #pragma HLS pipeline II=1 style=stp
+                        if (!fifo_from_ctrl.empty()) {
+                            int16_v16 tmp; fifo_from_ctrl.try_read(tmp);
+                            conv1_unpack_row: for (int j = 0; j < 16; j++) {
+                                #pragma HLS unroll
+                                X[row_cycle_index][i*16 + j] = tmp[j];
+                            }
+                            i++;
+                        }
+                    }
+                }
+            }
+            row_cycle_index = (st == 0) ? ((row_cycle_index + 2) % kernel_shape_mul_2) : ((row_cycle_index + 1) % kernel_shape);
 
-                    int16_v16 pkt;
-                    for (int cc = 0; cc < 16; cc++) {
-                        #pragma HLS unroll
-                        int col = col_block*16 + cc;
-                        ap_int<16> sum = 0;
-                        for (int kr = 0; kr < kernel_shape; kr++) {
-                            for (int kc = 0; kc < kernel_shape; kc++) {
-                                if (!((col == 0 && kc == 0) || (col == (input_shape - 1) && kc == kernel_shape - 1) ||
-                                    (row == 0 && rr == 0 && kr == 0) || (row == (input_shape_div_2 - 1) && rr == 1 && kr == kernel_shape - 1))
-                                ) {
-                                    sum += kernel[kr*kernel_shape + kc] * X[(row_cycle_index + 1 + rr + kr)%(2*kernel_shape)][col + kc - 1];
+            // Compute across row
+            if (row >= 0) {
+                conv3_compute_loop: for (int col_block = 0; col_block < (col_bound >> 4); col_block++) {
+                    for (int rr = 0; rr < rr_bound; rr++) {
+                        #pragma HLS pipeline II=1
+
+                        bool check_st = (rr == 1 || st == 1);
+
+                        int16_v16 pkt;
+                        for (int cc = 0; cc < 16; cc++) {
+                            #pragma HLS unroll
+                            int col = col_block*16 + cc;
+                            ap_int<16> sum = 0;
+                            for (int kr = 0; kr < kernel_shape; kr++) {
+                                const int r = (st == 0) ? ((row_cycle_index + 1 + rr + kr)%kernel_shape_mul_2) : ((row_cycle_index + kr)%kernel_shape);
+                                for (int kc = 0; kc < kernel_shape; kc++) {
+                                    if (!((col == 0 && kc == 0) || (col == (col_bound - 1) && kc == kernel_shape - 1) ||
+                                        (row == 0 && rr == 0 && kr == 0) || (row == (row_bound - 1) && check_st && kr == kernel_shape - 1))
+                                    ) {
+                                        sum += kernel[kr*kernel_shape + kc] * X[r][col + kc - 1];
+                                    }
                                 }
                             }
+                            pkt[cc] = sum;
                         }
-                        pkt[cc] = sum;
-                    }
-                    fifo_to_ctrl[rr].write(pkt);
-                }
-            }
-        }
-    }
-
-    int16_v16 tmp_2 = fifo_kernel.read();
-    for(int j = 0; j < 16; j++){
-        #pragma HLS unroll
-        kernel[j] = tmp_2[j];
-    }
-
-    constexpr int row_count = 150;
-    constexpr int col_count = layer3_output_shape;
-    constexpr int col_count_div_16 = col_count / 16;
-
-    row_cycle_index = 1;
-    for (int row = -1; row < row_count; row++) {
-        // Fetch row
-        if (row < row_count - 1) {
-            conv1_fetch_row: for (int i = 0; i < col_count_div_16;) {
-                #pragma HLS pipeline II=1 style=stp
-                if (!fifo_from_ctrl.empty()) {
-                    int16_v16 tmp; fifo_from_ctrl.try_read(tmp);
-                    conv1_unpack_row: for (int j = 0; j < 16; j++) {
-                        #pragma HLS unroll
-                        X[row_cycle_index][i*16 + j] = tmp[j];
-                    }
-                    i++;
-                }
-            }
-        }
-        row_cycle_index = (row_cycle_index + 1) % kernel_shape;
-
-        // Compute across row
-        if (row >= 0) {
-            for (int col_block = 0; col_block < (col_count >> 4); col_block++) {
-                #pragma HLS pipeline II=1
-                int16_v16 pkt;
-                for (int cc = 0; cc < 16; cc++) {
-                    #pragma HLS unroll
-                    int col = col_block*16 + cc;
-                    ap_int<16> sum = 0;
-                    for (int kr = 0; kr < kernel_shape; kr++) {
-                        for (int kc = 0; kc < kernel_shape; kc++) {
-                            if (!((col == 0 && kc == 0) || (col == (col_count - 1) && kc == kernel_shape - 1) ||
-                                (row == 0 && kr == 0) || (row == (row_count - 1) && kr == kernel_shape - 1))
-                            ) {
-                                sum += kernel[kr*kernel_shape + kc] * X[(row_cycle_index + kr)%kernel_shape][col + kc - 1];
-                            }
+                        if(st == 0){
+                            fifo_to_ctrl[rr].write(pkt);
+                        } else {
+                            fifo_output.write(pkt);
                         }
                     }
-                    pkt[cc] = sum;
                 }
-                fifo_output.write(pkt);
             }
         }
     }
