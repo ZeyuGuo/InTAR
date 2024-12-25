@@ -5,6 +5,8 @@ CONNECTIVITY_FILE := hbm_config.ini
 
 CPU_EXECUTABLE := build/self-attn
 HLS_EXECUTABLE := build/self-attn-intrra
+SPATIAL_EXECUTABLE := build/self-attn-spatial
+SEQUENTIAL_EXECUTABLE := build/self-attn-sequential
 
 CPU_SRCS := self-attn.cpp
 HLS_HOST_SRCS := self-attn-intrra-host.cpp
