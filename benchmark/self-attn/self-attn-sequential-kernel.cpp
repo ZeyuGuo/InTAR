@@ -1,6 +1,7 @@
 #include <iostream>
 #include <ap_int.h>
 #include <tapa.h>
+#include <glog/logging.h>
 
 using namespace std;
 
@@ -167,6 +168,7 @@ void vector_mac(const vec_t& a, const vec_t& b, type_t& c){
     }
 }
 
+
 void attention_top(
     tapa::async_mmap<vec_t>& in_glb,
     tapa::async_mmap<vec_t>& WQ_glb,  // flattened with column major order
@@ -199,28 +201,31 @@ void attention_top(
         }
     }
 
+    LOG(INFO) << "Input read and cached";
+
     // Q = WQ * input
     for (int j = 0; j < D;){
         vec_t acc[D];
         for (int k_req = 0, k_resp = 0; k_resp < D / VEC_LEN;){
             if (k_req < D / VEC_LEN && k_req < D && !WQ_glb.read_addr.full()){
                 WQ_glb.read_addr.write(j * D / VEC_LEN + k_req);
+                k_req++;
+                
             }
             bool success = WQ_glb.read_data.try_read(tmp_vec);
             if(success){                
-                for (int i = 0; i < D; i++){  // input is already cached, can directly read
-                    vector_mac(input[i * (D / VEC_LEN) + k_req], tmp_vec, acc[i][j % VEC_LEN]);  // FIXME: Since VEC_LEN is 16, we can efficiently use the last 4 bits to index the vector for the mod operation. 
+                for (int i = 0; i < N; i++){  // input is already cached, can directly read
+                    vector_mac(input[i * (D / VEC_LEN) + k_resp], tmp_vec, acc[i][j % VEC_LEN]);  // FIXME: Since VEC_LEN is 16, we can efficiently use the last 4 bits to index the vector for the mod operation. 
                 }
-                k_req++;
                 k_resp++;
             }
         }
         j++;  // increment first then use it to do the modulo, so we don't need to use (j_req + 1) % VEC_LEN
         if (j % VEC_LEN == 0){
             // write a column to offchip
-            for (int i_req = 0, i_resp = 0; i_resp < D;){
-                if (i_req < D && !offchip_Q.write_addr.full() && !offchip_Q.write_data.full()){
-                    offchip_Q.write_addr.write(i_req * (D / VEC_LEN) + j);
+            for (int i_req = 0, i_resp = 0; i_resp < N;){
+                if (i_req < N && !offchip_Q.write_addr.full() && !offchip_Q.write_data.full()){
+                    offchip_Q.write_addr.write(i_req * (D / VEC_LEN) + ((j-1) / VEC_LEN));
                     offchip_Q.write_data.try_write(acc[i_req]);
                     i_req++;
                 }
@@ -233,28 +238,31 @@ void attention_top(
         }
     }
 
+    LOG(INFO) << "Q computed";
+
     // K = WK * input
     for (int j = 0; j < D;){
         vec_t acc[D];
         for (int k_req = 0, k_resp = 0; k_resp < D / VEC_LEN;){
             if (k_req < D / VEC_LEN && k_req < D && !WK_glb.read_addr.full()){
                 WK_glb.read_addr.write(j * D / VEC_LEN + k_req);
+                k_req++;
+                
             }
             bool success = WK_glb.read_data.try_read(tmp_vec);
             if(success){                
-                for (int i = 0; i < D; i++){  // input is already cached, can directly read
-                    vector_mac(input[i * (D / VEC_LEN) + k_req], tmp_vec, acc[i][j % VEC_LEN]);  // FIXME: Since VEC_LEN is 16, we can efficiently use the last 4 bits to index the vector for the mod operation. 
+                for (int i = 0; i < N; i++){  // input is already cached, can directly read
+                    vector_mac(input[i * (D / VEC_LEN) + k_resp], tmp_vec, acc[i][j % VEC_LEN]);  // FIXME: Since VEC_LEN is 16, we can efficiently use the last 4 bits to index the vector for the mod operation. 
                 }
-                k_req++;
                 k_resp++;
             }
         }
         j++;  // increment first then use it to do the modulo, so we don't need to use (j_req + 1) % VEC_LEN
         if (j % VEC_LEN == 0){
             // write a column to offchip
-            for (int i_req = 0, i_resp = 0; i_resp < D;){
-                if (i_req < D && !offchip_K.write_addr.full() && !offchip_K.write_data.full()){
-                    offchip_K.write_addr.write(i_req * (D / VEC_LEN) + j);
+            for (int i_req = 0, i_resp = 0; i_resp < N;){
+                if (i_req < N && !offchip_K.write_addr.full() && !offchip_K.write_data.full()){
+                    offchip_K.write_addr.write(i_req * (D / VEC_LEN) + ((j-1) / VEC_LEN));
                     offchip_K.write_data.try_write(acc[i_req]);
                     i_req++;
                 }
@@ -267,21 +275,59 @@ void attention_top(
         }
     }
 
+    LOG(INFO) << "K computed";
+
+    // V = WV * input
+    for (int j = 0; j < D;){
+        vec_t acc[D];
+        for (int k_req = 0, k_resp = 0; k_resp < D / VEC_LEN;){
+            if (k_req < D / VEC_LEN && k_req < D && !WV_glb.read_addr.full()){
+                WV_glb.read_addr.write(j * D / VEC_LEN + k_req);
+                k_req++;
+                
+            }
+            bool success = WV_glb.read_data.try_read(tmp_vec);
+            if(success){                
+                for (int i = 0; i < N; i++){  // input is already cached, can directly read
+                    vector_mac(input[i * (D / VEC_LEN) + k_resp], tmp_vec, acc[i][j % VEC_LEN]);  // FIXME: Since VEC_LEN is 16, we can efficiently use the last 4 bits to index the vector for the mod operation. 
+                }
+                k_resp++;
+            }
+        }
+        j++;  // increment first then use it to do the modulo, so we don't need to use (j_req + 1) % VEC_LEN
+        if (j % VEC_LEN == 0){
+            // write a column to offchip
+            for (int i_req = 0, i_resp = 0; i_resp < N;){
+                if (i_req < N && !offchip_K.write_addr.full() && !offchip_K.write_data.full()){
+                    offchip_V.write_addr.write(i_req * (D / VEC_LEN) + ((j-1) / VEC_LEN));
+                    offchip_V.write_data.try_write(acc[i_req]);
+                    i_req++;
+                }
+                bool success = false;
+                auto resp = offchip_V.write_resp.read(success);
+                if(success){
+                    i_resp += unsigned(resp)+1;
+                }
+            }
+        }
+    }
+
+    LOG(INFO) << "V computed";
 }
 
 // Self-attention computation
 void selfAttention(
-    tapa::mmap<vec_t>& in_glb,
-    tapa::mmap<vec_t>& WQ_glb,
-    tapa::mmap<vec_t>& WK_glb,
-    tapa::mmap<vec_t>& WV_glb,
-    tapa::mmap<vec_t>& offchip_Q,
-    tapa::mmap<vec_t>& offchip_K,
-    tapa::mmap<vec_t>& offchip_V,
-    tapa::mmap<vec_t>& offchip_scores,
-    tapa::mmap<vec_t>& offchip_sm_scores,
-    tapa::mmap<vec_t>& out_glb,
-    tapa::mmap<int>& cycle_count
+    tapa::mmap<vec_t> in_glb,
+    tapa::mmap<vec_t> WQ_glb,
+    tapa::mmap<vec_t> WK_glb,
+    tapa::mmap<vec_t> WV_glb,
+    tapa::mmap<vec_t> offchip_Q,
+    tapa::mmap<vec_t> offchip_K,
+    tapa::mmap<vec_t> offchip_V,
+    tapa::mmap<vec_t> offchip_scores,
+    tapa::mmap<vec_t> offchip_sm_scores,
+    tapa::mmap<vec_t> out_glb,
+    tapa::mmap<int> cycle_count
 ) {
 
     tapa::streams<bool, 1> fifo_fin("fifo_fin");
@@ -299,7 +345,6 @@ void selfAttention(
             offchip_scores,
             offchip_sm_scores,
             out_glb,
-
             fifo_fin
         )
         .invoke<tapa::join>(

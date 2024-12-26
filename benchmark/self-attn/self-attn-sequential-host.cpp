@@ -10,6 +10,7 @@ FIXME: This host is from intrra host.
 #include <cmath>
 #include <tapa.h>
 #include <gflags/gflags.h>
+#include <glog/logging.h>
 #include <ap_int.h>
 
 #define N 256
@@ -20,7 +21,7 @@ constexpr int D_head = 1024;
 constexpr int input_size = N * (D / VEC_LEN);
 constexpr int output_size = N * D_head / 32;
 
-typedef ap_int<16> type_t;
+using type_t = ap_int<16>;
 using vec_t = tapa::vec_t<type_t, VEC_LEN>;
 
 void selfAttention(
@@ -42,40 +43,43 @@ using aligned_vector = std::vector<T, tapa::aligned_allocator<T>>;
 
 DEFINE_string(bitstream, "", "path to bitstream file");
 
-void to_column_major(const type_t in[D][D], vec_t (&out)[D/VEC_LEN][D]){
-    for (int i = 0; i < D / VEC_LEN; i++){
-        for (int j = 0; j < D; j++){
-            for (int k = 0; k < VEC_LEN; k++){
-                out[i][j][k] = in[i*VEC_LEN + k][j];
-            }
-        }
-    }
-}
+// void to_column_major(const type_t in[D][D], vec_t (&out)[D/VEC_LEN][D]){
+//     for (int i = 0; i < D / VEC_LEN; i++){
+//         for (int j = 0; j < D; j++){
+//             for (int k = 0; k < VEC_LEN; k++){
+//                 out[i][j][k] = in[i*VEC_LEN + k][j];
+//             }
+//         }
+//     }
+// }
 
-void input_to_tiled(const type_t in[N][D], vec_t (&out)[N][D/VEC_LEN]){
-    for (int i = 0; i < N; i++){
-        for (int j = 0; j < D / VEC_LEN; j++){
-            for (int k = 0; k < VEC_LEN; k++){
-                out[i][j][k] = in[i][j*VEC_LEN + k];
-            }
-        }
-    }
-}
+// void input_to_tiled(const type_t in[N][D], vec_t (&out)[N][D/VEC_LEN]){
+//     for (int i = 0; i < N; i++){
+//         for (int j = 0; j < D / VEC_LEN; j++){
+//             for (int k = 0; k < VEC_LEN; k++){
+//                 out[i][j][k] = in[i][j*VEC_LEN + k];
+//             }
+//         }
+//     }
+// }
 
 int main(int argc, char *argv[]){
+    FLAGS_logtostderr = true;
+    google::InitGoogleLogging(argv[0]);
+    
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     srand((unsigned)time(nullptr));
 
     // Example input matrix (8x8)
-    type_t input_primitive[N][D];
+    LOG(INFO) << "Initializing input matrix...";
+    aligned_vector<ap_int<16>> input(N * D);
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j < D; ++j) {
-            input_primitive[i][j] = ap_int<16>(1);
+            input[i * D + j] = ap_int<16>(1);
         }
-    }
-    vec_t input[N][D/VEC_LEN];
-    input_to_tiled(input_primitive, input);
+    } 
+    LOG(INFO) << "Input matrix initialized with all 1s";
 
     type_t WQ_primitive[D][D];
     type_t WK_primitive[D][D];
@@ -87,14 +91,20 @@ int main(int argc, char *argv[]){
             WV_primitive[i][j] = ap_int<16>(1);
         }
     }
+    LOG(INFO) << "Weight matrices initialized with all 1s";
+    aligned_vector<type_t> WQ(D * D);
+    aligned_vector<type_t> WK(D * D);
+    aligned_vector<type_t> WV(D * D);
 
-    vec_t WQ[D/VEC_LEN][D];
-    vec_t WK[D/VEC_LEN][D];
-    vec_t WV[D/VEC_LEN][D];
-
-    to_column_major(WQ_primitive, WQ);
-    to_column_major(WK_primitive, WK);
-    to_column_major(WV_primitive, WV);
+    // transpose WQ_primitive, WK_primitive, WV_primitive
+    for (int i = 0; i < D; i++){
+        for (int j = 0; j < D; j++){
+            WQ[j * D + i] = WQ_primitive[i][j];
+            WK[j * D + i] = WK_primitive[i][j];
+            WV[j * D + i] = WV_primitive[i][j];
+        }
+    }
+    LOG(INFO) << "Weight matrices transposed";
 
     aligned_vector<int> cycle_count(1);
 
@@ -105,21 +115,23 @@ int main(int argc, char *argv[]){
     aligned_vector<ap_int<16>> offchip_sm_scores(N * N);
     aligned_vector<ap_int<16>> output(N * D);
     
-    int64_t kernel_time_ns = tapa::invoke(selfAttention, FLAGS_bitstream,
-        tapa::read_only_mmap<ap_int<16>>(input),
-        tapa::read_only_mmap<ap_int<16>>(WQ),
-        tapa::read_only_mmap<ap_int<16>>(WK),
-        tapa::read_only_mmap<ap_int<16>>(WV),
+    LOG(INFO) << "Offchip memory initialized";
 
-        tapa::read_write_mmap<ap_int<16>>(offchip_Q).reinterpret<vec_t>(),
-        tapa::read_write_mmap<ap_int<16>>(offchip_K).reinterpret<vec_t>(),
-        tapa::read_write_mmap<ap_int<16>>(offchip_V).reinterpret<vec_t>(),
-        tapa::read_write_mmap<ap_int<16>>(offchip_scores).reinterpret<vec_t>(),
-        tapa::read_write_mmap<ap_int<16>>(offchip_sm_scores).reinterpret<vec_t>(),
-        
-        tapa::write_only_mmap<ap_int<16>>(output).reinterpret<vec_t>(),
+    int64_t kernel_time_ns = tapa::invoke(selfAttention, FLAGS_bitstream,
+        tapa::read_only_mmap<type_t>(input).reinterpret<vec_t>(),
+        tapa::read_only_mmap<type_t>(WQ).reinterpret<vec_t>(),
+        tapa::read_only_mmap<type_t>(WK).reinterpret<vec_t>(),
+        tapa::read_only_mmap<type_t>(WV).reinterpret<vec_t>(),
+        tapa::read_write_mmap<type_t>(offchip_Q).reinterpret<vec_t>(),
+        tapa::read_write_mmap<type_t>(offchip_K).reinterpret<vec_t>(),
+        tapa::read_write_mmap<type_t>(offchip_V).reinterpret<vec_t>(),
+        tapa::read_write_mmap<type_t>(offchip_scores).reinterpret<vec_t>(),
+        tapa::read_write_mmap<type_t>(offchip_sm_scores).reinterpret<vec_t>(),
+        tapa::write_only_mmap<type_t>(output).reinterpret<vec_t>(),
         tapa::write_only_mmap<int>(cycle_count)
     );
+
+    LOG(INFO) << "Kernel invoked";
 
     std::cout << "Cycle count: " << cycle_count[0] << std::endl;
     std::cout << "Kernel time (ns): " << kernel_time_ns << std::endl;

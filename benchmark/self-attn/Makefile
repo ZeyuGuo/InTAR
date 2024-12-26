@@ -32,7 +32,7 @@ $(SPATIAL_EXECUTABLE): $(BASELINE_SRCS)
 	$(GCC) -o $(SPATIAL_EXECUTABLE) -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
 $(SEQUENTIAL_EXECUTABLE): $(SEQUENTIAL_SRCS)
-	$(GCC) -o $(SEQUENTIAL_EXECUTABLE) -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include -I./include
+	$(GCC) -o $(SEQUENTIAL_EXECUTABLE) -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
 .PHONY: build_tapa
 build_tapa: $(HLS_KERNEL_SRCS)
@@ -164,7 +164,7 @@ self-attn-intrra: self-attn-intrra-kernel.cpp self-attn-intrra-host.cpp
 	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
 self-attn-sequential: $(SEQUENTIAL_SRCS)
-	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include -I./include
+	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
 # self-attn-hls is moved to to the target "build_tapa"
 # self-attn-hls: self-attn-intrra-kernel.cpp
