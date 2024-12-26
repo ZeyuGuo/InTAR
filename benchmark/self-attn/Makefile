@@ -14,6 +14,7 @@ HLS_KERNEL_SRCS := self-attn-intrra-kernel.cpp
 SPATIAL_HOST_SRCS := self-attn-spatial-host.cpp
 SPATIAL_KERNEL_SRCS := self-attn-spatial-kernel.cpp
 SEQUENTIAL_HOST_SRCS := self-attn-sequential-host.cpp
+# SEQUENTIAL_HOST_SRCS := self-attn-sequential-testbench.cpp
 SEQUENTIAL_KERNEL_SRCS := self-attn-sequential-kernel.cpp
 HLS_SRCS := $(HLS_KERNEL_SRCS) $(HLS_HOST_SRCS)
 BASELINE_SRCS := $(SPATIAL_KERNEL_SRCS) $(SPATIAL_HOST_SRCS)
@@ -31,7 +32,7 @@ $(SPATIAL_EXECUTABLE): $(BASELINE_SRCS)
 	$(GCC) -o $(SPATIAL_EXECUTABLE) -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
 $(SEQUENTIAL_EXECUTABLE): $(SEQUENTIAL_SRCS)
-	$(GCC) -o $(SEQUENTIAL_EXECUTABLE) -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
+	$(GCC) -o $(SEQUENTIAL_EXECUTABLE) -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include -I./include
 
 .PHONY: build_tapa
 build_tapa: $(HLS_KERNEL_SRCS)
@@ -122,7 +123,7 @@ build_sequential: $(SEQUENTIAL_KERNEL_SRCS)
 		--platform $(PLATFORM) \
 		--top $(TOP_NAME) \
 		--work-dir build/solver.$(PLATFORM).hw.xo.tapa \
-		--connectivity $(CONNECTIVITY_FILE) \
+		--connectivity sequential_hbm_config.ini \
 		--enable-hbm-binding-adjustment \
 		--enable-synth-util \
 		--run-floorplan-dse \
@@ -162,8 +163,8 @@ self-attn-spatial: self-attn-spatial-kernel.cpp self-attn-spatial-host.cpp
 self-attn-intrra: self-attn-intrra-kernel.cpp self-attn-intrra-host.cpp
 	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
-self-attn-sequential: self-attn-sequential-kernel.cpp self-attn-sequential-host.cpp
-	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
+self-attn-sequential: $(SEQUENTIAL_SRCS)
+	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include -I./include
 
 # self-attn-hls is moved to to the target "build_tapa"
 # self-attn-hls: self-attn-intrra-kernel.cpp
