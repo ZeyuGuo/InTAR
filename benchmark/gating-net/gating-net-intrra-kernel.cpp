@@ -90,21 +90,25 @@ void CC0_up_gate(
     ap_int<16> X[batch_size][input_dim];
     #pragma HLS array_partition variable=X complete dim=1
 
-    for(int i = 0; i < (batch_size_div_2 >> 4); i++){
-        for(int j = 0; j < input_dim;){
-            if(!fifo_input.empty()){
-                int16_v16 tmp; fifo_input.try_read(tmp);
-                for(int k = 0; k < 16; k++){
-                    X[i*16+k][j] = tmp[k];
+    for(int st = 0; st < 2; st++){
+
+        const int fetch_bound = (batch_size_div_2 >> 4);
+        const int send_bound = (st == 0) ? 1 : 2;
+
+        for(int i = fetch_bound * st; i < fetch_bound * (st+1); i++){
+            for(int j = 0; j < input_dim;){
+                if(!fifo_input.empty()){
+                    int16_v16 tmp; fifo_input.try_read(tmp);
+                    for(int k = 0; k < 16; k++){
+                        X[i*16+k][j] = tmp[k];
+                    }
+                    j++;
                 }
-                j++;
             }
         }
-    }
 
-    for(int i = 0; i < (hidden_dim >> 4); i++){
-        for(int j = 0; j < (batch_size_div_2 >> 4); j++){
-            ap_int<16> acc_vec[2][16][16];
+        for(int i = 0; i < (hidden_dim >> 4); i++){
+            ap_int<16> acc_vec[2][16][32];
             #pragma HLS array_partition variable=acc_vec complete dim=1
             #pragma HLS array_partition variable=acc_vec complete dim=2
             #pragma HLS array_partition variable=acc_vec complete dim=3
@@ -113,7 +117,7 @@ void CC0_up_gate(
                 #pragma HLS unroll
                 for(int p = 0; p < 16; p++){
                     #pragma HLS unroll
-                    for(int q = 0; q < 16; q++){
+                    for(int q = 0; q < 32; q++){
                         #pragma HLS unroll
                         acc_vec[k][p][q] = 0;
                     }
@@ -125,7 +129,14 @@ void CC0_up_gate(
                 int16_v16 tmp = fifo_weight.read();
                 for(int p = 0; p < 16; p++){
                     for(int q = 0; q < 16; q++){
-                        acc_vec[k % 2][p][q] += tmp[p] * X[j*16+q][k];
+                        acc_vec[k % 2][p][q] += tmp[p] * X[q][k];
+                    }
+                }
+                if(st == 1) {
+                    for(int p = 0; p < 16; p++){
+                        for(int q = 0; q < 16; q++){
+                            acc_vec[k % 2][p][16+q] += tmp[p] * X[16+q][k];
+                        }
                     }
                 }
             }
@@ -139,80 +150,32 @@ void CC0_up_gate(
                 }
             }
 
-            for(int k = 0; k < 16; k++){
-                int16_v16 tmp;
+            if(st == 1) {
                 for(int p = 0; p < 16; p++){
                     #pragma HLS unroll
-                    tmp[p] = acc_vec[0][k][p];
-                }
-                fifo_to_SFU.write(tmp);
-            }
-
-        }
-    }
-
-    for(int i = (batch_size_div_2 >> 4); i < (batch_size >> 4); i++){
-        for(int j = 0; j < input_dim;){
-            if(!fifo_input.empty()){
-                int16_v16 tmp; fifo_input.try_read(tmp);
-                for(int k = 0; k < 16; k++){
-                    X[i*16+k][j] = tmp[k];
-                }
-                j++;
-            }
-        }
-    }
-
-    for(int i = 0; i < (hidden_dim >> 4); i++){
-        ap_int<16> acc_vec[2][16][32];
-        #pragma HLS array_partition variable=acc_vec complete dim=1
-        #pragma HLS array_partition variable=acc_vec complete dim=2
-        #pragma HLS array_partition variable=acc_vec complete dim=3
-        
-        for(int k = 0; k < 2; k++){
-            #pragma HLS unroll
-            for(int p = 0; p < 16; p++){
-                #pragma HLS unroll
-                for(int q = 0; q < 32; q++){
-                    #pragma HLS unroll
-                    acc_vec[k][p][q] = 0;
-                }
-            }
-        }
-
-        for(int k = 0; k < input_dim; k++){
-            int16_v16 tmp = fifo_weight.read();
-            for(int m = 0; m < 2; m++){
-                #pragma HLS pipeline II=1
-                for(int p = 0; p < 16; p++){
                     for(int q = 0; q < 16; q++){
-                        acc_vec[k % 2][p][m*16+q] += tmp[p] * X[m*16+q][k];
+                        #pragma HLS unroll
+                        acc_vec[0][p][16+q] += acc_vec[1][p][16+q];
                     }
                 }
             }
-        }
 
-        for(int m = 0; m < 2; m++){
-            #pragma HLS pipeline II=1
-            for(int p = 0; p < 16; p++){
-                #pragma HLS unroll
-                for(int q = 0; q < 16; q++){
-                    #pragma HLS unroll
-                    acc_vec[0][p][m*16+q] += acc_vec[1][p][m*16+q];
+            for(int m = 0; m < send_bound; m++){
+                for(int k = 0; k < 16; k++){
+                    #pragma HLS pipeline II=1
+                    int16_v16 tmp;
+                    for(int p = 0; p < 16; p++){
+                        #pragma HLS unroll
+                        tmp[p] = acc_vec[0][k][m*16+p];
+                    }
+                    if(st == 0) {
+                        fifo_to_SFU.write(tmp);
+                    } else {
+                        fifo_to_CC1.write(tmp);
+                    }
                 }
             }
-        }
 
-        for(int m = 0; m < 2; m++){
-            for(int k = 0; k < 16; k++){
-                #pragma HLS pipeline II=1
-                int16_v16 tmp;
-                for(int p = 0; p < 16; p++){
-                    #pragma HLS unroll
-                    tmp[p] = acc_vec[0][k][m*16+p];
-                }
-                fifo_to_CC1.write(tmp);
-            }
         }
 
     }
@@ -229,131 +192,141 @@ void CC1_down(
     ap_int<16> X[batch_size][input_dim];
     #pragma HLS array_partition variable=X complete dim=1
 
-    for(int i = 0; i < (batch_size_div_2 >> 4); i++){
-        for(int j = 0; j < input_dim;){
-            if(!fifo_input.empty()){
-                int16_v16 tmp; fifo_input.try_read(tmp);
-                for(int k = 0; k < 16; k++){
-                    X[i*16+k][j] = tmp[k];
+    for(int st = 0; st < 2; st++){
+
+        const int ii_bound = (st == 0) ? 1 : (input_dim >> 4);
+        const int jj_bound = (st == 0) ? 1 : 2;
+        const int k_bound = (st == 0) ? input_dim : 16;
+
+        if(st == 0){
+            for(int i = 0; i < (batch_size_div_2 >> 4); i++){
+                for(int j = 0; j < input_dim;){
+                    if(!fifo_input.empty()){
+                        int16_v16 tmp; fifo_input.try_read(tmp);
+                        for(int k = 0; k < 16; k++){
+                            X[i*16+k][j] = tmp[k];
+                        }
+                        j++;
+                    }
                 }
-                j++;
+            }
+        } else {
+            for(int j = 0; j < input_dim; j++){
+                for(int k = 0; k < 32; k++){
+                    #pragma HLS unroll
+                    X[k][j] = 0;
+                }
             }
         }
-    }
 
-    for(int i = 0; i < (hidden_dim >> 4); i++){
-        for(int j = 0; j < (batch_size_div_2 >> 4); j++){
-            ap_int<16> acc_vec[2][16][16];
-            #pragma HLS array_partition variable=acc_vec complete dim=1
-            #pragma HLS array_partition variable=acc_vec complete dim=2
-            #pragma HLS array_partition variable=acc_vec complete dim=3
-            
-            for(int k = 0; k < 2; k++){
-                #pragma HLS unroll
-                for(int p = 0; p < 16; p++){
-                    #pragma HLS unroll
-                    for(int q = 0; q < 16; q++){
+        for(int i = 0; i < (hidden_dim >> 4); i++){
+            ap_int<16> cache[batch_size][16];
+            #pragma HLS array_partition variable=cache cyclic dim=1 factor=16
+            if(st == 1){
+                for(int i = 0; i < (batch_size >> 4); i++){
+                    for(int j = 0; j < 16; j++){
+                        int16_v16 tmp = fifo_from_CC0.read();
+                        for(int k = 0; k < 16; k++){
+                            #pragma HLS unroll
+                            cache[i*16+k][j] = tmp[k];
+                        }
+                    }
+                }
+            }
+
+            for(int ii = 0; ii < ii_bound; ii++){
+
+                ap_int<16> cache_w[16][16];
+                #pragma HLS array_partition variable=cache_w complete dim=2
+
+                if(st == 1){
+                    for(int j = 0; j < 16; j++){
+                        int16_v16 tmp = fifo_weight.read();
+                        for(int k = 0; k < 16; k++){
+                            #pragma HLS unroll
+                            cache_w[j][k] = tmp[k];
+                        }
+                    }
+                }
+
+                for(int jj = 0; jj < jj_bound; jj++){
+
+                    ap_int<16> acc_vec[2][16][16];
+                    #pragma HLS array_partition variable=acc_vec complete dim=1
+                    #pragma HLS array_partition variable=acc_vec complete dim=2
+                    #pragma HLS array_partition variable=acc_vec complete dim=3
+                    
+                    for(int k = 0; k < 2; k++){
                         #pragma HLS unroll
-                        acc_vec[k][p][q] = 0;
+                        for(int p = 0; p < 16; p++){
+                            #pragma HLS unroll
+                            for(int q = 0; q < 16; q++){
+                                #pragma HLS unroll
+                                acc_vec[k][p][q] = 0;
+                            }
+                        }
                     }
-                }
-            }
 
-            for(int k = 0; k < input_dim; k++){
-                #pragma HLS pipeline II=1
-                int16_v16 tmp = fifo_weight.read();
-                for(int p = 0; p < 16; p++){
-                    for(int q = 0; q < 16; q++){
-                        acc_vec[k % 2][p][q] += tmp[p] * X[j*16+q][k];
+                    for(int k = 0; k < k_bound; k++){
+                        #pragma HLS pipeline II=1
+
+                        ap_int<16> op1[16];
+                        ap_int<16> op2[16];
+                        #pragma HLS array_partition variable=op1 complete
+                        #pragma HLS array_partition variable=op2 complete
+
+                        int16_v16 tmp; 
+                        if(st == 0) tmp = fifo_weight.read();
+
+                        for(int p = 0; p < 16; p++){
+                            #pragma HLS unroll
+                            if(st == 0){
+                                op1[p] = tmp[p];
+                                op2[p] = X[p][k];
+                            } else {
+                                op1[p] = cache_w[k][p];
+                                op2[p] = cache[jj*16+p][k];
+                            }
+                        }
+
+                        for(int p = 0; p < 16; p++){
+                            #pragma HLS unroll
+                            for(int q = 0; q < 16; q++){
+                                #pragma HLS unroll
+                                acc_vec[k % 2][p][q] += op1[p] * op2[q];
+                            }
+                        }
                     }
-                }
-            }
 
 
-            for(int p = 0; p < 16; p++){
-                #pragma HLS unroll
-                for(int q = 0; q < 16; q++){
-                    #pragma HLS unroll
-                    acc_vec[0][p][q] += acc_vec[1][p][q];
-                }
-            }
-
-            for(int k = 0; k < 16; k++){
-                int16_v16 tmp;
-                for(int p = 0; p < 16; p++){
-                    #pragma HLS unroll
-                    tmp[p] = acc_vec[0][k][p];
-                }
-                fifo_to_SFU.write(tmp);
-            }
-
-        }
-    }
-
-    for(int j = 0; j < input_dim; j++){
-        for(int k = 0; k < 32; k++){
-            #pragma HLS unroll
-            X[k][j] = 0;
-        }
-    }
-
-    for(int h = 0; h < (hidden_dim >> 4); h++){
-        ap_int<16> cache[batch_size][16];
-        #pragma HLS array_partition variable=cache cyclic dim=1 factor=16
-        for(int i = 0; i < (batch_size >> 4); i++){
-            for(int j = 0; j < 16; j++){
-                int16_v16 tmp = fifo_from_CC0.read();
-                for(int k = 0; k < 16; k++){
-                    #pragma HLS unroll
-                    cache[i*16+k][j] = tmp[k];
-                }
-            }
-        }
-
-        for(int i = 0; i < (input_dim >> 4); i++){
-
-            ap_int<16> cache_w[16][16];
-            #pragma HLS array_partition variable=cache_w complete dim=2
-            for(int j = 0; j < 16; j++){
-                int16_v16 tmp = fifo_weight.read();
-                for(int k = 0; k < 16; k++){
-                    #pragma HLS unroll
-                    cache_w[j][k] = tmp[k];
-                }
-            }
-
-
-            for(int j = 0; j < (batch_size >> 4); j++){
-
-                ap_int<16> acc_vec[2][16][16];
-                #pragma HLS array_partition variable=acc_vec complete dim=1
-                #pragma HLS array_partition variable=acc_vec complete dim=2
-                #pragma HLS array_partition variable=acc_vec complete dim=3
-                
-                for(int k = 0; k < 2; k++){
-                    #pragma HLS unroll
                     for(int p = 0; p < 16; p++){
                         #pragma HLS unroll
                         for(int q = 0; q < 16; q++){
                             #pragma HLS unroll
-                            acc_vec[k][p][q] = 0;
+                            acc_vec[0][p][q] += acc_vec[1][p][q];
                         }
                     }
-                }
 
-                for(int k = 0; k < 16; k++){
-                    #pragma HLS pipeline II=1
-                    for(int p = 0; p < 16; p++){
-                        for(int q = 0; q < 16; q++){
-                            acc_vec[k % 2][p][q] += cache_w[k][p] * cache[j*16+q][k];
+                    if(st == 1) {
+                        for(int p = 0; p < 16; p++){
+                            #pragma HLS pipeline II=1
+                            for(int q = 0; q < 16; q++){
+                                #pragma HLS unroll
+                                X[jj*16+q][ii*16+p] += acc_vec[0][p][q];
+                            }
                         }
                     }
-                }
 
-                for(int p = 0; p < 16; p++){
-                    for(int q = 0; q < 16; q++){
-                        #pragma HLS unroll
-                        X[j*16+q][i*16+p] += (acc_vec[0][p][q] + acc_vec[1][p][q]);
+                    if(st == 0){
+                        for(int k = 0; k < 16; k++){
+                            #pragma HLS pipeline II=1
+                            int16_v16 tmp;
+                            for(int p = 0; p < 16; p++){
+                                #pragma HLS unroll
+                                tmp[p] = acc_vec[0][k][p];
+                            }
+                            fifo_to_SFU.write(tmp);
+                        }
                     }
                 }
             }
@@ -433,7 +406,7 @@ void SiLU(
             int16_v16 tmp_out;
             for(int i = 0; i < 16; i++){
                 #pragma HLS unroll
-                float denom = 1.0 / (1.0 + hls::exp(-tmp[i]));
+                float denom = (float)1.0 / (float)(1.0 + hls::exp(-tmp[i]));
                 float res = (float)(tmp[i]) * denom;
                 tmp_out[i] = ap_int<16>((int)(res));
             }
@@ -469,7 +442,7 @@ void gatingNet(
     tapa::streams<int16_v16, 2> fifo_to_SiLU("fifo_to_SiLU");
     tapa::streams<int16_v16, 2> fifo_to_central_mem("fifo_to_central_mem");
     tapa::streams<int16_v16, 2> fifo_to_acc("fifo_to_acc");
-    tapa::stream<int16_v16> fifo_to_CC1("fifo_to_CC1");
+    tapa::stream<int16_v16, 128> fifo_to_CC1("fifo_to_CC1");
 
     tapa::stream<bool> fifo_fin("fifo_fin");
     tapa::stream<int16_v16> fifo_output("fifo_output");
