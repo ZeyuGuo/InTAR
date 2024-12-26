@@ -32,8 +32,6 @@ void selfAttention(
     tapa::mmap<vec_t> offchip_Q,
     tapa::mmap<vec_t> offchip_K,
     tapa::mmap<vec_t> offchip_V,
-    tapa::mmap<vec_t> offchip_scores,
-    tapa::mmap<vec_t> offchip_sm_scores,
     tapa::mmap<vec_t> output,
     tapa::mmap<int> cycle_count
 );
@@ -111,8 +109,6 @@ int main(int argc, char *argv[]){
     aligned_vector<ap_int<16>> offchip_Q(N * D);
     aligned_vector<ap_int<16>> offchip_K(N * D);
     aligned_vector<ap_int<16>> offchip_V(N * D);
-    aligned_vector<ap_int<16>> offchip_scores(N * N);
-    aligned_vector<ap_int<16>> offchip_sm_scores(N * N);
     aligned_vector<ap_int<16>> output(N * D);
     
     LOG(INFO) << "Offchip memory initialized";
@@ -125,8 +121,6 @@ int main(int argc, char *argv[]){
         tapa::read_write_mmap<type_t>(offchip_Q).reinterpret<vec_t>(),
         tapa::read_write_mmap<type_t>(offchip_K).reinterpret<vec_t>(),
         tapa::read_write_mmap<type_t>(offchip_V).reinterpret<vec_t>(),
-        tapa::read_write_mmap<type_t>(offchip_scores).reinterpret<vec_t>(),
-        tapa::read_write_mmap<type_t>(offchip_sm_scores).reinterpret<vec_t>(),
         tapa::write_only_mmap<type_t>(output).reinterpret<vec_t>(),
         tapa::write_only_mmap<int>(cycle_count)
     );

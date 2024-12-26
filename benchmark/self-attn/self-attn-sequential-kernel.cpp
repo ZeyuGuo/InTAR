@@ -177,14 +177,14 @@ void attention_top(
     tapa::async_mmap<vec_t>& offchip_Q,
     tapa::async_mmap<vec_t>& offchip_K,
     tapa::async_mmap<vec_t>& offchip_V,
-    tapa::async_mmap<vec_t>& offchip_scores,
-    tapa::async_mmap<vec_t>& offchip_sm_scores,
     tapa::async_mmap<vec_t>& out_glb,
     tapa::ostream<bool>& fifo_fin
 ){
 
     vec_t input[N * (D / VEC_LEN)];  // segment the input into block matrix with N by (D / VEC_LEN) blocks and flattened
     vec_t tmp_vec;
+
+    type_t S[N][N];  // scores Q * K^T
 
     // Read and cache input
     const int input_size = N * D / VEC_LEN;
@@ -298,7 +298,7 @@ void attention_top(
         if (j % VEC_LEN == 0){
             // write a column to offchip
             for (int i_req = 0, i_resp = 0; i_resp < N;){
-                if (i_req < N && !offchip_K.write_addr.full() && !offchip_K.write_data.full()){
+                if (i_req < N && !offchip_V.write_addr.full() && !offchip_V.write_data.full()){
                     offchip_V.write_addr.write(i_req * (D / VEC_LEN) + ((j-1) / VEC_LEN));
                     offchip_V.write_data.try_write(acc[i_req]);
                     i_req++;
@@ -313,6 +313,49 @@ void attention_top(
     }
 
     LOG(INFO) << "V computed";
+
+    // scores = Q * K^T
+    vec_t tmp_q[D / VEC_LEN];
+    vec_t tmp_k;
+    for (int i = 0; i < N; i++){
+        // first cache all the q row
+        for (int kq_req = 0, kq_resp = 0; kq_resp < D / VEC_LEN;){
+            if (kq_req < D / VEC_LEN && kq_req < D && !offchip_Q.read_addr.full()){
+                offchip_Q.read_addr.write(i * (D / VEC_LEN) + kq_req);
+                kq_req++;
+            }
+            bool q_success = offchip_Q.read_data.try_read(tmp_q[kq_resp]);
+            if (q_success){
+                kq_resp++;
+            }
+        }
+        
+        for (int j = 0; j < N; j++){
+            S[i][j] = 0;
+
+            // accumulate according to the k column read
+            for (int kk_req = 0, kk_resp = 0; kk_resp < D / VEC_LEN;){
+                if (kk_req < D / VEC_LEN && kk_req < D && !offchip_K.read_addr.full()){
+                    offchip_K.read_addr.write(j * (D / VEC_LEN) + kk_req);
+                    kk_req++;
+                }
+                bool k_success = offchip_K.read_data.try_read(tmp_k);
+                if (k_success){
+                    vector_mac(tmp_q[kk_resp], tmp_k, S[i][j]);
+                    kk_resp++;
+                }
+            }
+        }
+    }
+
+    LOG(INFO) << "S computed";
+
+    // softmax(S)
+    // softmax(S, S);
+    // LOG(INFO) << "S softmaxed";
+
+    // output = S * V
+
 }
 
 // Self-attention computation
@@ -324,8 +367,6 @@ void selfAttention(
     tapa::mmap<vec_t> offchip_Q,
     tapa::mmap<vec_t> offchip_K,
     tapa::mmap<vec_t> offchip_V,
-    tapa::mmap<vec_t> offchip_scores,
-    tapa::mmap<vec_t> offchip_sm_scores,
     tapa::mmap<vec_t> out_glb,
     tapa::mmap<int> cycle_count
 ) {
@@ -342,8 +383,6 @@ void selfAttention(
             offchip_Q,
             offchip_K,
             offchip_V,
-            offchip_scores,
-            offchip_sm_scores,
             out_glb,
             fifo_fin
         )
