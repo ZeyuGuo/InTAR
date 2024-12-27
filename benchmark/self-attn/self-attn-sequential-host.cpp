@@ -21,7 +21,7 @@ constexpr int D_head = 1024;
 constexpr int input_size = N * (D / VEC_LEN);
 constexpr int output_size = N * D_head / 32;
 
-using type_t = ap_int<16>;
+using type_t = ap_int<64>;
 using vec_t = tapa::vec_t<type_t, VEC_LEN>;
 
 void selfAttention(
@@ -71,10 +71,10 @@ int main(int argc, char *argv[]){
 
     // Example input matrix (8x8)
     LOG(INFO) << "Initializing input matrix...";
-    aligned_vector<ap_int<16>> input(N * D);
+    aligned_vector<type_t> input(N * D);
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j < D; ++j) {
-            input[i * D + j] = ap_int<16>(1);
+            input[i * D + j] = type_t(1);
         }
     } 
     LOG(INFO) << "Input matrix initialized with all 1s";
@@ -84,9 +84,9 @@ int main(int argc, char *argv[]){
     type_t WV_primitive[D][D];
     for (int i = 0; i < D; i++){
         for (int j = 0; j < D; j++){
-            WQ_primitive[i][j] = ap_int<16>(1);
-            WK_primitive[i][j] = ap_int<16>(1);
-            WV_primitive[i][j] = ap_int<16>(1);
+            WQ_primitive[i][j] = type_t(1);
+            WK_primitive[i][j] = type_t(1);
+            WV_primitive[i][j] = type_t(1);
         }
     }
     LOG(INFO) << "Weight matrices initialized with all 1s";
@@ -106,10 +106,10 @@ int main(int argc, char *argv[]){
 
     aligned_vector<int> cycle_count(1);
 
-    aligned_vector<ap_int<16>> offchip_Q(N * D);
-    aligned_vector<ap_int<16>> offchip_K(N * D);
-    aligned_vector<ap_int<16>> offchip_V(N * D);
-    aligned_vector<ap_int<16>> output(N * D);
+    aligned_vector<type_t> offchip_Q(N * D);
+    aligned_vector<type_t> offchip_K(N * D);
+    aligned_vector<type_t> offchip_V(N * D);
+    aligned_vector<type_t> output(N * D);
     
     LOG(INFO) << "Offchip memory initialized";
 
@@ -132,15 +132,12 @@ int main(int argc, char *argv[]){
     std::cout << "Kernel time (us): " << float(kernel_time_ns)/1000.0 << std::endl;
     std::cout << "Kernel time (ms): " << float(kernel_time_ns)/1000000.0 << std::endl;
 
-    // print out the offichip_Q
-    // for (int i = 0; i < N; i++){
-    //     for (int j = 0; j < D / VEC_LEN; j++){
-    //         for (int k = 0; k < VEC_LEN; k++){
-    //             std::cout << offchip_Q[i * D / VEC_LEN + j][k] << ' ';
-    //         }
-    //     }
-    //     std::cout << '\n';
-    // }
+    for (int i = 0; i < N; i++){
+        for (int j = 0; j < D; j++){
+            std::cout << output[i * D + j] << ' ';
+        }
+        std::cout << '\n';
+    }
 
     return 0;
 }

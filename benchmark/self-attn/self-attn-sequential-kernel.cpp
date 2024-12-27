@@ -9,7 +9,7 @@ using namespace std;
 #define D 1024
 #define VEC_LEN 16
 
-typedef ap_int<16> type_t;
+typedef ap_int<64> type_t;
 using vec_t = tapa::vec_t<type_t, VEC_LEN>;
 
 void measure_cycle(tapa::istreams<bool, 1>& fifo_fin, tapa::mmap<int> cycle_count){
@@ -27,41 +27,6 @@ void measure_cycle(tapa::istreams<bool, 1>& fifo_fin, tapa::mmap<int> cycle_coun
         }
     }
 }
-
-// Kernel
-void read_input_N_D(
-    type_t (&input_mtx)[N][D],
-    type_t (&internal_bank)[N][D]
-){
-    for(int i = 0; i < N; i++){
-        for(int j = 0; j < D; j++){
-            internal_bank[i][j] = input_mtx[i][j];
-        }
-    }
-}
-
-void read_input_D_D(
-    type_t (&input_mtx)[D][D],
-    type_t (&internal_bank)[D][D]
-){
-    for(int i = 0; i < D; i++){
-        for(int j = 0; j < D; j++){
-            internal_bank[i][j] = input_mtx[i][j];
-        }
-    }
-}
-
-
-void write_output(
-    type_t (&output_mtx)[N][D],
-    type_t (&internal_bank)[N][D]
-){
-    for(int i = 0; i < N; i++){
-        for(int j = 0; j < D; j++){
-            output_mtx[i][j] = internal_bank[i][j];
-        }
-    }
-} 
 
 
 // Helper function to apply softmax to a vector
@@ -90,65 +55,6 @@ void softmax(
     }
 }
 
-void matMul_N_D_D(
-    type_t (&A)[N][D],
-    type_t (&B)[D][D],
-    type_t (&C)[N][D]
-) {
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < D; j++) {
-#pragma HLS pipeline II=1
-            C[i][j] = 0;
-            for (int k = 0; k < D; k++) {
-                C[i][j] += A[i][k] * B[k][j];
-            }
-        }
-    }
-}
-
-void matMul_N_D_N(
-    type_t (&A)[N][D],
-    type_t (&B)[D][N],
-    type_t (&C)[N][N]
-) {
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++) {
-#pragma HLS pipeline II=1
-            C[i][j] = 0;
-            for (int k = 0; k < D; k++) {
-                C[i][j] += A[i][k] * B[k][j];
-            }
-        }
-    }
-}
-
-void matMul_N_N_D(
-    type_t (&A)[N][N],
-    type_t (&B)[N][D],
-    type_t (&C)[N][D]
-) {
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < D; j++) {
-#pragma HLS pipeline II=1
-            C[i][j] = 0;
-            for (int k = 0; k < N; k++) {
-                C[i][j] += A[i][k] * B[k][j];
-            }
-        }
-    }
-}
-
-// This is not to actually transpose the matrix, but to convert column major order to row major order. 
-void transpose_N_D(
-    type_t (&input_mtx)[N][D],
-    type_t (&output_mtx)[D][N]
-) {
-    for(int i = 0; i < N; i++){
-        for(int j = 0; j < D; j++){
-            output_mtx[j][i] = input_mtx[i][j];
-        }
-    }
-}
 
 void scale(
     type_t (&input_mtx)[N][N],
@@ -203,9 +109,9 @@ void attention_top(
 
     LOG(INFO) << "Input read and cached";
 
-    vec_t acc[D];
+    vec_t acc[N];
     // initialize acc to 0
-    for (int i = 0; i < D; i++) {
+    for (int i = 0; i < N; i++) {
         for (int k = 0; k < VEC_LEN; k++) {
             acc[i][k] = 0;
         }
@@ -243,7 +149,7 @@ void attention_top(
             }
 
             // clear out acc to 0
-            for (int i = 0; i < D; i++) {
+            for (int i = 0; i < N; i++) {
                 for (int k = 0; k < VEC_LEN; k++) {
                     acc[i][k] = 0;
                 }
@@ -286,7 +192,7 @@ void attention_top(
             }
 
             // clear out acc to 0
-            for (int i = 0; i < D; i++) {
+            for (int i = 0; i < N; i++) {
                 for (int k = 0; k < VEC_LEN; k++) {
                     acc[i][k] = 0;
                 }
@@ -329,7 +235,7 @@ void attention_top(
             }
 
             // clear out acc to 0
-            for (int i = 0; i < D; i++) {
+            for (int i = 0; i < N; i++) {
                 for (int k = 0; k < VEC_LEN; k++) {
                     acc[i][k] = 0;
                 }
