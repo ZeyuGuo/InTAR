@@ -133,12 +133,14 @@ int main(int argc, char *argv[]){
     std::cout << "Kernel time (ms): " << float(kernel_time_ns)/1000000.0 << std::endl;
 
     // print out the offichip_Q
-    for (int i = 0; i < N; i++){
-        for (int j = 0; j < D; j++){
-            std::cout << offchip_Q[i][j] << '\t';
-        }
-        std::cout << '\n';
-    }
+    // for (int i = 0; i < N; i++){
+    //     for (int j = 0; j < D / VEC_LEN; j++){
+    //         for (int k = 0; k < VEC_LEN; k++){
+    //             std::cout << offchip_Q[i * D / VEC_LEN + j][k] << ' ';
+    //         }
+    //     }
+    //     std::cout << '\n';
+    // }
 
     return 0;
 }

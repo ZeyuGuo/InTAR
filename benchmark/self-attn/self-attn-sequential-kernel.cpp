@@ -203,14 +203,20 @@ void attention_top(
 
     LOG(INFO) << "Input read and cached";
 
+    vec_t acc[D];
+    // initialize acc to 0
+    for (int i = 0; i < D; i++) {
+        for (int k = 0; k < VEC_LEN; k++) {
+            acc[i][k] = 0;
+        }
+    }
+
     // Q = WQ * input
-    for (int j = 0; j < D;){
-        vec_t acc[D];
+    for (int j = 0; j < D;){        
         for (int k_req = 0, k_resp = 0; k_resp < D / VEC_LEN;){
             if (k_req < D / VEC_LEN && !WQ_glb.read_addr.full()){
                 WQ_glb.read_addr.write(j * D / VEC_LEN + k_req);
                 k_req++;
-                
             }
             bool success = WQ_glb.read_data.try_read(tmp_vec);
             if(success){                
@@ -235,6 +241,13 @@ void attention_top(
                     i_resp += unsigned(resp)+1;
                 }
             }
+
+            // clear out acc to 0
+            for (int i = 0; i < D; i++) {
+                for (int k = 0; k < VEC_LEN; k++) {
+                    acc[i][k] = 0;
+                }
+            }
         }
     }
 
@@ -242,7 +255,6 @@ void attention_top(
 
     // K = WK * input
     for (int j = 0; j < D;){
-        vec_t acc[D];
         for (int k_req = 0, k_resp = 0; k_resp < D / VEC_LEN;){
             if (k_req < D / VEC_LEN && !WK_glb.read_addr.full()){
                 WK_glb.read_addr.write(j * D / VEC_LEN + k_req);
@@ -272,6 +284,13 @@ void attention_top(
                     i_resp += unsigned(resp)+1;
                 }
             }
+
+            // clear out acc to 0
+            for (int i = 0; i < D; i++) {
+                for (int k = 0; k < VEC_LEN; k++) {
+                    acc[i][k] = 0;
+                }
+            }
         }
     }
 
@@ -279,7 +298,6 @@ void attention_top(
 
     // V = WV * input
     for (int j = 0; j < D;){
-        vec_t acc[D];
         for (int k_req = 0, k_resp = 0; k_resp < D / VEC_LEN;){
             if (k_req < D / VEC_LEN && !WV_glb.read_addr.full()){
                 WV_glb.read_addr.write(j * D / VEC_LEN + k_req);
@@ -307,6 +325,13 @@ void attention_top(
                 auto resp = offchip_V.write_resp.read(success);
                 if(success){
                     i_resp += unsigned(resp)+1;
+                }
+            }
+
+            // clear out acc to 0
+            for (int i = 0; i < D; i++) {
+                for (int k = 0; k < VEC_LEN; k++) {
+                    acc[i][k] = 0;
                 }
             }
         }
@@ -396,6 +421,9 @@ void attention_top(
     }
 
     LOG(INFO) << "Output computed";
+
+    // terminate the kernel
+    fifo_fin.write(true);
 }
 
 // Self-attention computation
