@@ -1,0 +1,504 @@
+I1226 23:10:52.409 tapa.util:184] logging level set to INFO
+I1226 23:10:52.410 tapa.tapac:514] running translated command: `tapa dse-floorplan --input=self-attn-sequential-kernel.cpp --top=selfAttention --platform=xilinx_u280_xdma_201920_3 --connectivity=sequential_hbm_config.ini --enable-synth-util --enable-hbm-binding-adjustment --max-parallel-synth-jobs=16 --floorplan-output=build/solver.tcl --output=build/solver.xilinx_u280_xdma_201920_3.hw.xo --bitstream-script=build/solver.xilinx_u280_xdma_201920_3.hw_generate_bitstream.sh`
+I1226 23:10:52.412 tapa.util:184] logging level set to INFO
+I1226 23:10:52.412 tapa.tapa:54] tapa version: 0.0.20240301.1
+I1226 23:10:52.412 tapa.tapa:58] Python recursion limit set to 3000
+I1226 23:10:52.414 tapa.steps.dse:98] 
+I1226 23:10:52.414 tapa.steps.dse:99] --------------------------------------------------------------------------------
+I1226 23:10:52.414 tapa.steps.dse:100] DSE preparation: synthesize each task into RTL
+I1226 23:10:52.414 tapa.steps.dse:101] --------------------------------------------------------------------------------
+I1226 23:10:52.414 tapa.steps.dse:102] 
+I1226 23:10:54.398 tapa.steps.analyze:151] added vendor include path `/mnt/software/xilinx/Vitis_HLS/2021.2/include`
+I1226 23:10:54.398 tapa.steps.analyze:248] Running tapacc command: /usr/local/bin/tapacc /home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/csynth/flatten/flatten-7fe4bf0c-self-attn-sequential-kernel.cpp -top selfAttention -- -std=c++17 -I /usr/local/lib/python3.10/dist-packages/tapa/../../../src -isystem /mnt/software/xilinx/Vitis_HLS/2021.2/include -stdlib=libc++ -isystem /usr/lib/llvm-17/include/c++/v1/ -isystem /usr/include/clang/17/include/ -isystem /usr/lib/clang/17/include/
+I1226 23:10:56.356 tapa.steps.common:92] writing TAPA graph to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/csynth/graph.json`.
+I1226 23:10:56.357 tapa.steps.common:92] writing TAPA settings to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/csynth/settings.json`.
+I1226 23:10:57.212 tapa.steps.common:46] reusing TAPA settings from upstream flows.
+I1226 23:10:57.275 tapa.core:182] extracting HLS C++ files
+I1226 23:10:57.286 tapa.core:214] running HLS
+I1226 23:10:57.290 tapa.core:260] spawn 10 workers for parallel HLS synthesis of the tasks
+I1226 23:11:24.081 tapa.core:275] extracting RTL files
+I1226 23:11:24.445 tapa.core:306] parsing RTL files and populating tasks
+D1226 23:11:25.257 tapa.core:315] parsing attention_top
+D1226 23:11:25.262 tapa.core:319] populating attention_top
+D1226 23:11:25.262 tapa.core:315] parsing measure_cycle
+D1226 23:11:25.264 tapa.core:319] populating measure_cycle
+D1226 23:11:25.264 tapa.core:315] parsing selfAttention
+D1226 23:11:25.265 tapa.core:319] populating selfAttention
+D1226 23:11:25.266 tapa.task:149] mmap argument 'selfAttention.WK_glb' (id_width=1, thread_count=1, chan_size=None, chan_count=None) is connected to port 'attention_top_0.WK_glb'
+D1226 23:11:25.266 tapa.task:149] mmap argument 'selfAttention.WQ_glb' (id_width=1, thread_count=1, chan_size=None, chan_count=None) is connected to port 'attention_top_0.WQ_glb'
+D1226 23:11:25.266 tapa.task:149] mmap argument 'selfAttention.WV_glb' (id_width=1, thread_count=1, chan_size=None, chan_count=None) is connected to port 'attention_top_0.WV_glb'
+D1226 23:11:25.266 tapa.task:149] mmap argument 'selfAttention.in_glb' (id_width=1, thread_count=1, chan_size=None, chan_count=None) is connected to port 'attention_top_0.in_glb'
+D1226 23:11:25.266 tapa.task:149] mmap argument 'selfAttention.offchip_K' (id_width=1, thread_count=1, chan_size=None, chan_count=None) is connected to port 'attention_top_0.offchip_K'
+D1226 23:11:25.266 tapa.task:149] mmap argument 'selfAttention.offchip_Q' (id_width=1, thread_count=1, chan_size=None, chan_count=None) is connected to port 'attention_top_0.offchip_Q'
+D1226 23:11:25.266 tapa.task:149] mmap argument 'selfAttention.offchip_V' (id_width=1, thread_count=1, chan_size=None, chan_count=None) is connected to port 'attention_top_0.offchip_V'
+D1226 23:11:25.266 tapa.task:149] mmap argument 'selfAttention.out_glb' (id_width=1, thread_count=1, chan_size=None, chan_count=None) is connected to port 'attention_top_0.out_glb'
+D1226 23:11:25.266 tapa.task:149] mmap argument 'selfAttention.cycle_count' (id_width=1, thread_count=1, chan_size=None, chan_count=None) is connected to port 'measure_cycle_0.cycle_count'
+I1226 23:11:25.266 tapa.core:323] instrumenting upper-level RTL
+I1226 23:11:25.267 tapa.steps.common:92] writing TAPA settings to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/csynth/settings.json`.
+I1226 23:11:25.268 tapa.steps.dse:98] 
+I1226 23:11:25.268 tapa.steps.dse:99] --------------------------------------------------------------------------------
+I1226 23:11:25.268 tapa.steps.dse:100] Start generating design point 1 with --max-slr-width-limit 15000
+I1226 23:11:25.268 tapa.steps.dse:101] --------------------------------------------------------------------------------
+I1226 23:11:25.268 tapa.steps.dse:102] 
+I1226 23:11:25.748 tapa.steps.common:46] reusing TAPA settings from upstream flows.
+W1226 23:11:25.749 tapa.steps.optimize:151] HBM port binding adjustment is enabled. The final binding may be different from sequential_hbm_config.ini
+I1226 23:11:25.749 tapa.floorplan:437] generating post-synthesis resource utilization reports
+I1226 23:11:25.749 tapa.floorplan:438] this step runs logic synthesis of each task for accurate area info, it may take a while
+I1226 23:11:25.752 tapa.floorplan:442] spawn 10 workers for parallel logic synthesis. use --max-parallel-synth-jobs to enable more workers.
+D1226 23:11:25.753 tapa.floorplan:408] synthesizing attention_top
+D1226 23:11:25.753 tapa.floorplan:408] synthesizing measure_cycle
+I1226 23:13:10.004 tapa.core:358] Running floorplanning
+W1226 23:13:10.006 tapa.task_graph:75] WK_glb is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1226 23:13:10.006 tapa.task_graph:75] WQ_glb is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1226 23:13:10.007 tapa.task_graph:75] WV_glb is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1226 23:13:10.007 tapa.task_graph:75] in_glb is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1226 23:13:10.007 tapa.task_graph:75] offchip_K is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1226 23:13:10.007 tapa.task_graph:75] offchip_Q is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1226 23:13:10.007 tapa.task_graph:75] offchip_V is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1226 23:13:10.007 tapa.task_graph:75] out_glb is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+W1226 23:13:10.007 tapa.task_graph:75] cycle_count is assumed to be both read from and written to. If not, please use --read-only-args or --write-only-args for better optimization results.
+D1226 23:13:10.008 tapa.task_graph:157] area of attention_top: {'BRAM': 308, 'DSP': 52, 'FF': 6362, 'LUT': 5266, 'URAM': 0}
+D1226 23:13:10.008 tapa.task_graph:157] area of measure_cycle: {'BRAM': 1, 'DSP': 0, 'FF': 894, 'LUT': 505, 'URAM': 0}
+I1226 23:13:11.221 tapa.floorplan:292] generate new port binding at /home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/run-1/run/link_config.ini
+I1226 23:13:11.222 tapa.steps.common:92] writing TAPA settings to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/run-1/run/settings.json`.
+I1226 23:13:11.224 tapa.steps.common:46] reusing TAPA settings from upstream flows.
+I1226 23:13:11.225 tapa.floorplan:77] generate the floorplan constraint at ./work.out/run-1/constraints.tcl
+I1226 23:13:11.226 tapa.core:450] top task register level set to 3
+I1226 23:13:11.226 tapa.core:454] instrumenting top-level RTL
+E1226 23:13:11.227 tapa.verilog.xilinx.module:728] not adding pragma for unknown port 'ap_local_block'
+D1226 23:13:11.235 tapa.core:527]   instantiating FIFOs in selfAttention
+D1226 23:13:11.235 tapa.core:540]     instantiating selfAttention.fifo_fin_selfAttention[0]
+D1226 23:13:11.235 tapa.core:505]   connecting selfAttention's children tasks
+W1226 23:13:11.235 tapa.verilog.xilinx.module:222] assuming fifo_fin is a singleton array
+W1226 23:13:11.235 tapa.verilog.xilinx.module:222] assuming fifo_fin is a singleton array
+W1226 23:13:11.235 tapa.verilog.xilinx.module:222] assuming fifo_fin is a singleton array
+D1226 23:13:11.236 tapa.core:596]   instantiating children tasks in selfAttention
+D1226 23:13:11.240 tapa.core:669]     pipelined signal: WK_glb_slr_0 => attention_top_0___WK_glb
+D1226 23:13:11.240 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_addr_din` is connected to async_mmap port `WK_glb.read_addr`
+D1226 23:13:11.240 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_addr_full_n` is connected to async_mmap port `WK_glb.read_addr`
+D1226 23:13:11.240 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_addr_write` is connected to async_mmap port `WK_glb.read_addr`
+D1226 23:13:11.240 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_data_s_dout` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.240 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WK_glb_read_data_peek_dout` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.241 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_data_s_empty_n` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.241 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WK_glb_read_data_peek_empty_n` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.241 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_data_s_read` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.241 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_addr_din` is connected to async_mmap port `WK_glb.write_addr`
+D1226 23:13:11.241 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_addr_full_n` is connected to async_mmap port `WK_glb.write_addr`
+D1226 23:13:11.241 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_addr_write` is connected to async_mmap port `WK_glb.write_addr`
+D1226 23:13:11.241 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_data_din` is connected to async_mmap port `WK_glb.write_data`
+D1226 23:13:11.242 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_data_full_n` is connected to async_mmap port `WK_glb.write_data`
+D1226 23:13:11.242 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_data_write` is connected to async_mmap port `WK_glb.write_data`
+D1226 23:13:11.242 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_resp_s_dout` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.242 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WK_glb_write_resp_peek_dout` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.242 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_resp_s_empty_n` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.242 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WK_glb_write_resp_peek_empty_n` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.242 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_resp_s_read` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.243 tapa.core:669]     pipelined signal: WQ_glb_slr_0 => attention_top_0___WQ_glb
+D1226 23:13:11.243 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_addr_din` is connected to async_mmap port `WQ_glb.read_addr`
+D1226 23:13:11.243 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_addr_full_n` is connected to async_mmap port `WQ_glb.read_addr`
+D1226 23:13:11.244 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_addr_write` is connected to async_mmap port `WQ_glb.read_addr`
+D1226 23:13:11.244 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_data_s_dout` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.244 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WQ_glb_read_data_peek_dout` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.244 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_data_s_empty_n` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.244 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WQ_glb_read_data_peek_empty_n` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.244 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_data_s_read` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.245 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_addr_din` is connected to async_mmap port `WQ_glb.write_addr`
+D1226 23:13:11.245 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_addr_full_n` is connected to async_mmap port `WQ_glb.write_addr`
+D1226 23:13:11.245 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_addr_write` is connected to async_mmap port `WQ_glb.write_addr`
+D1226 23:13:11.245 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_data_din` is connected to async_mmap port `WQ_glb.write_data`
+D1226 23:13:11.245 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_data_full_n` is connected to async_mmap port `WQ_glb.write_data`
+D1226 23:13:11.245 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_data_write` is connected to async_mmap port `WQ_glb.write_data`
+D1226 23:13:11.245 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_resp_s_dout` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.245 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WQ_glb_write_resp_peek_dout` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.246 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_resp_s_empty_n` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.246 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WQ_glb_write_resp_peek_empty_n` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.246 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_resp_s_read` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.246 tapa.core:669]     pipelined signal: WV_glb_slr_0 => attention_top_0___WV_glb
+D1226 23:13:11.246 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_addr_din` is connected to async_mmap port `WV_glb.read_addr`
+D1226 23:13:11.246 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_addr_full_n` is connected to async_mmap port `WV_glb.read_addr`
+D1226 23:13:11.247 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_addr_write` is connected to async_mmap port `WV_glb.read_addr`
+D1226 23:13:11.247 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_data_s_dout` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.247 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WV_glb_read_data_peek_dout` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.247 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_data_s_empty_n` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.247 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WV_glb_read_data_peek_empty_n` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.247 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_data_s_read` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.248 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_addr_din` is connected to async_mmap port `WV_glb.write_addr`
+D1226 23:13:11.248 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_addr_full_n` is connected to async_mmap port `WV_glb.write_addr`
+D1226 23:13:11.248 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_addr_write` is connected to async_mmap port `WV_glb.write_addr`
+D1226 23:13:11.248 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_data_din` is connected to async_mmap port `WV_glb.write_data`
+D1226 23:13:11.248 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_data_full_n` is connected to async_mmap port `WV_glb.write_data`
+D1226 23:13:11.248 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_data_write` is connected to async_mmap port `WV_glb.write_data`
+D1226 23:13:11.249 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_resp_s_dout` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.249 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WV_glb_write_resp_peek_dout` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.249 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_resp_s_empty_n` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.249 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WV_glb_write_resp_peek_empty_n` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.249 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_resp_s_read` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.249 tapa.core:669]     pipelined signal: in_glb_slr_0 => attention_top_0___in_glb
+D1226 23:13:11.250 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_addr_din` is connected to async_mmap port `in_glb.read_addr`
+D1226 23:13:11.250 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_addr_full_n` is connected to async_mmap port `in_glb.read_addr`
+D1226 23:13:11.250 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_addr_write` is connected to async_mmap port `in_glb.read_addr`
+D1226 23:13:11.250 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_data_s_dout` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.250 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.in_glb_read_data_peek_dout` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.250 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_data_s_empty_n` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.250 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.in_glb_read_data_peek_empty_n` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.251 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_data_s_read` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.251 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_addr_din` is connected to async_mmap port `in_glb.write_addr`
+D1226 23:13:11.251 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_addr_full_n` is connected to async_mmap port `in_glb.write_addr`
+D1226 23:13:11.251 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_addr_write` is connected to async_mmap port `in_glb.write_addr`
+D1226 23:13:11.251 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_data_din` is connected to async_mmap port `in_glb.write_data`
+D1226 23:13:11.251 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_data_full_n` is connected to async_mmap port `in_glb.write_data`
+D1226 23:13:11.251 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_data_write` is connected to async_mmap port `in_glb.write_data`
+D1226 23:13:11.252 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_resp_s_dout` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.252 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.in_glb_write_resp_peek_dout` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.252 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_resp_s_empty_n` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.252 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.in_glb_write_resp_peek_empty_n` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.252 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_resp_s_read` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.252 tapa.core:669]     pipelined signal: offchip_K_slr_0 => attention_top_0___offchip_K
+D1226 23:13:11.253 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_addr_din` is connected to async_mmap port `offchip_K.read_addr`
+D1226 23:13:11.253 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_addr_full_n` is connected to async_mmap port `offchip_K.read_addr`
+D1226 23:13:11.253 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_addr_write` is connected to async_mmap port `offchip_K.read_addr`
+D1226 23:13:11.253 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_data_s_dout` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.253 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_K_read_data_peek_dout` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.253 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_data_s_empty_n` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.253 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_K_read_data_peek_empty_n` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.254 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_data_s_read` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.254 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_addr_din` is connected to async_mmap port `offchip_K.write_addr`
+D1226 23:13:11.254 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_addr_full_n` is connected to async_mmap port `offchip_K.write_addr`
+D1226 23:13:11.254 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_addr_write` is connected to async_mmap port `offchip_K.write_addr`
+D1226 23:13:11.254 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_data_din` is connected to async_mmap port `offchip_K.write_data`
+D1226 23:13:11.254 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_data_full_n` is connected to async_mmap port `offchip_K.write_data`
+D1226 23:13:11.255 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_data_write` is connected to async_mmap port `offchip_K.write_data`
+D1226 23:13:11.255 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_resp_s_dout` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.255 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_K_write_resp_peek_dout` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.255 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_resp_s_empty_n` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.255 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_K_write_resp_peek_empty_n` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.255 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_resp_s_read` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.256 tapa.core:669]     pipelined signal: offchip_Q_slr_0 => attention_top_0___offchip_Q
+D1226 23:13:11.256 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_addr_din` is connected to async_mmap port `offchip_Q.read_addr`
+D1226 23:13:11.256 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_addr_full_n` is connected to async_mmap port `offchip_Q.read_addr`
+D1226 23:13:11.256 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_addr_write` is connected to async_mmap port `offchip_Q.read_addr`
+D1226 23:13:11.256 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_data_s_dout` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.256 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_Q_read_data_peek_dout` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.256 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_data_s_empty_n` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.257 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_Q_read_data_peek_empty_n` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.257 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_data_s_read` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.257 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_addr_din` is connected to async_mmap port `offchip_Q.write_addr`
+D1226 23:13:11.257 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_addr_full_n` is connected to async_mmap port `offchip_Q.write_addr`
+D1226 23:13:11.257 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_addr_write` is connected to async_mmap port `offchip_Q.write_addr`
+D1226 23:13:11.257 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_data_din` is connected to async_mmap port `offchip_Q.write_data`
+D1226 23:13:11.258 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_data_full_n` is connected to async_mmap port `offchip_Q.write_data`
+D1226 23:13:11.258 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_data_write` is connected to async_mmap port `offchip_Q.write_data`
+D1226 23:13:11.258 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_resp_s_dout` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.258 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_Q_write_resp_peek_dout` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.258 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_resp_s_empty_n` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.258 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_Q_write_resp_peek_empty_n` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.258 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_resp_s_read` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.259 tapa.core:669]     pipelined signal: offchip_V_slr_0 => attention_top_0___offchip_V
+D1226 23:13:11.259 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_addr_din` is connected to async_mmap port `offchip_V.read_addr`
+D1226 23:13:11.259 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_addr_full_n` is connected to async_mmap port `offchip_V.read_addr`
+D1226 23:13:11.259 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_addr_write` is connected to async_mmap port `offchip_V.read_addr`
+D1226 23:13:11.259 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_data_s_dout` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.259 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_V_read_data_peek_dout` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.260 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_data_s_empty_n` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.260 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_V_read_data_peek_empty_n` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.260 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_data_s_read` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.260 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_addr_din` is connected to async_mmap port `offchip_V.write_addr`
+D1226 23:13:11.260 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_addr_full_n` is connected to async_mmap port `offchip_V.write_addr`
+D1226 23:13:11.260 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_addr_write` is connected to async_mmap port `offchip_V.write_addr`
+D1226 23:13:11.261 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_data_din` is connected to async_mmap port `offchip_V.write_data`
+D1226 23:13:11.261 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_data_full_n` is connected to async_mmap port `offchip_V.write_data`
+D1226 23:13:11.261 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_data_write` is connected to async_mmap port `offchip_V.write_data`
+D1226 23:13:11.261 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_resp_s_dout` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.261 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_V_write_resp_peek_dout` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.261 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_resp_s_empty_n` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.261 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_V_write_resp_peek_empty_n` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.262 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_resp_s_read` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.262 tapa.core:669]     pipelined signal: out_glb_slr_0 => attention_top_0___out_glb
+D1226 23:13:11.262 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_addr_din` is connected to async_mmap port `out_glb.read_addr`
+D1226 23:13:11.262 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_addr_full_n` is connected to async_mmap port `out_glb.read_addr`
+D1226 23:13:11.262 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_addr_write` is connected to async_mmap port `out_glb.read_addr`
+D1226 23:13:11.263 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_data_s_dout` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.263 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.out_glb_read_data_peek_dout` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.263 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_data_s_empty_n` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.263 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.out_glb_read_data_peek_empty_n` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.263 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_data_s_read` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.263 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_addr_din` is connected to async_mmap port `out_glb.write_addr`
+D1226 23:13:11.263 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_addr_full_n` is connected to async_mmap port `out_glb.write_addr`
+D1226 23:13:11.264 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_addr_write` is connected to async_mmap port `out_glb.write_addr`
+D1226 23:13:11.264 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_data_din` is connected to async_mmap port `out_glb.write_data`
+D1226 23:13:11.264 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_data_full_n` is connected to async_mmap port `out_glb.write_data`
+D1226 23:13:11.264 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_data_write` is connected to async_mmap port `out_glb.write_data`
+D1226 23:13:11.264 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_resp_s_dout` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.264 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.out_glb_write_resp_peek_dout` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.265 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_resp_s_empty_n` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.265 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.out_glb_write_resp_peek_empty_n` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.265 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_resp_s_read` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.265 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_addr_din` is connected to async_mmap port `WK_glb.read_addr`
+D1226 23:13:11.266 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_addr_full_n` is connected to async_mmap port `WK_glb.read_addr`
+D1226 23:13:11.266 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_addr_write` is connected to async_mmap port `WK_glb.read_addr`
+D1226 23:13:11.266 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_data_s_dout` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.266 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WK_glb_read_data_peek_dout` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.266 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_data_s_empty_n` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.266 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WK_glb_read_data_peek_empty_n` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.266 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_read_data_s_read` is connected to async_mmap port `WK_glb.read_data`
+D1226 23:13:11.267 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_addr_din` is connected to async_mmap port `WK_glb.write_addr`
+D1226 23:13:11.267 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_addr_full_n` is connected to async_mmap port `WK_glb.write_addr`
+D1226 23:13:11.267 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_addr_write` is connected to async_mmap port `WK_glb.write_addr`
+D1226 23:13:11.267 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_data_din` is connected to async_mmap port `WK_glb.write_data`
+D1226 23:13:11.267 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_data_full_n` is connected to async_mmap port `WK_glb.write_data`
+D1226 23:13:11.267 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_data_write` is connected to async_mmap port `WK_glb.write_data`
+D1226 23:13:11.268 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_resp_s_dout` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.268 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WK_glb_write_resp_peek_dout` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.268 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_resp_s_empty_n` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.268 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WK_glb_write_resp_peek_empty_n` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.268 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WK_glb_write_resp_s_read` is connected to async_mmap port `WK_glb.write_resp`
+D1226 23:13:11.268 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_addr_din` is connected to async_mmap port `WQ_glb.read_addr`
+D1226 23:13:11.268 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_addr_full_n` is connected to async_mmap port `WQ_glb.read_addr`
+D1226 23:13:11.269 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_addr_write` is connected to async_mmap port `WQ_glb.read_addr`
+D1226 23:13:11.269 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_data_s_dout` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.269 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WQ_glb_read_data_peek_dout` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.269 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_data_s_empty_n` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.269 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WQ_glb_read_data_peek_empty_n` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.269 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_read_data_s_read` is connected to async_mmap port `WQ_glb.read_data`
+D1226 23:13:11.269 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_addr_din` is connected to async_mmap port `WQ_glb.write_addr`
+D1226 23:13:11.270 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_addr_full_n` is connected to async_mmap port `WQ_glb.write_addr`
+D1226 23:13:11.270 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_addr_write` is connected to async_mmap port `WQ_glb.write_addr`
+D1226 23:13:11.270 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_data_din` is connected to async_mmap port `WQ_glb.write_data`
+D1226 23:13:11.270 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_data_full_n` is connected to async_mmap port `WQ_glb.write_data`
+D1226 23:13:11.270 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_data_write` is connected to async_mmap port `WQ_glb.write_data`
+D1226 23:13:11.270 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_resp_s_dout` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.270 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WQ_glb_write_resp_peek_dout` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.271 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_resp_s_empty_n` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.271 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WQ_glb_write_resp_peek_empty_n` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.271 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WQ_glb_write_resp_s_read` is connected to async_mmap port `WQ_glb.write_resp`
+D1226 23:13:11.271 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_addr_din` is connected to async_mmap port `WV_glb.read_addr`
+D1226 23:13:11.271 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_addr_full_n` is connected to async_mmap port `WV_glb.read_addr`
+D1226 23:13:11.271 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_addr_write` is connected to async_mmap port `WV_glb.read_addr`
+D1226 23:13:11.272 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_data_s_dout` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.272 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WV_glb_read_data_peek_dout` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.272 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_data_s_empty_n` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.272 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WV_glb_read_data_peek_empty_n` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.272 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_read_data_s_read` is connected to async_mmap port `WV_glb.read_data`
+D1226 23:13:11.272 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_addr_din` is connected to async_mmap port `WV_glb.write_addr`
+D1226 23:13:11.272 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_addr_full_n` is connected to async_mmap port `WV_glb.write_addr`
+D1226 23:13:11.273 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_addr_write` is connected to async_mmap port `WV_glb.write_addr`
+D1226 23:13:11.273 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_data_din` is connected to async_mmap port `WV_glb.write_data`
+D1226 23:13:11.273 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_data_full_n` is connected to async_mmap port `WV_glb.write_data`
+D1226 23:13:11.273 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_data_write` is connected to async_mmap port `WV_glb.write_data`
+D1226 23:13:11.273 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_resp_s_dout` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.273 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WV_glb_write_resp_peek_dout` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.273 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_resp_s_empty_n` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.274 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.WV_glb_write_resp_peek_empty_n` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.274 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.WV_glb_write_resp_s_read` is connected to async_mmap port `WV_glb.write_resp`
+D1226 23:13:11.274 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_addr_din` is connected to async_mmap port `in_glb.read_addr`
+D1226 23:13:11.274 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_addr_full_n` is connected to async_mmap port `in_glb.read_addr`
+D1226 23:13:11.275 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_addr_write` is connected to async_mmap port `in_glb.read_addr`
+D1226 23:13:11.275 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_data_s_dout` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.275 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.in_glb_read_data_peek_dout` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.275 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_data_s_empty_n` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.275 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.in_glb_read_data_peek_empty_n` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.275 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_read_data_s_read` is connected to async_mmap port `in_glb.read_data`
+D1226 23:13:11.275 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_addr_din` is connected to async_mmap port `in_glb.write_addr`
+D1226 23:13:11.276 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_addr_full_n` is connected to async_mmap port `in_glb.write_addr`
+D1226 23:13:11.276 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_addr_write` is connected to async_mmap port `in_glb.write_addr`
+D1226 23:13:11.276 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_data_din` is connected to async_mmap port `in_glb.write_data`
+D1226 23:13:11.276 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_data_full_n` is connected to async_mmap port `in_glb.write_data`
+D1226 23:13:11.276 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_data_write` is connected to async_mmap port `in_glb.write_data`
+D1226 23:13:11.276 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_resp_s_dout` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.276 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.in_glb_write_resp_peek_dout` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.277 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_resp_s_empty_n` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.277 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.in_glb_write_resp_peek_empty_n` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.277 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.in_glb_write_resp_s_read` is connected to async_mmap port `in_glb.write_resp`
+D1226 23:13:11.277 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_addr_din` is connected to async_mmap port `offchip_K.read_addr`
+D1226 23:13:11.277 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_addr_full_n` is connected to async_mmap port `offchip_K.read_addr`
+D1226 23:13:11.277 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_addr_write` is connected to async_mmap port `offchip_K.read_addr`
+D1226 23:13:11.277 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_data_s_dout` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.278 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_K_read_data_peek_dout` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.278 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_data_s_empty_n` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.278 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_K_read_data_peek_empty_n` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.278 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_read_data_s_read` is connected to async_mmap port `offchip_K.read_data`
+D1226 23:13:11.278 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_addr_din` is connected to async_mmap port `offchip_K.write_addr`
+D1226 23:13:11.278 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_addr_full_n` is connected to async_mmap port `offchip_K.write_addr`
+D1226 23:13:11.279 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_addr_write` is connected to async_mmap port `offchip_K.write_addr`
+D1226 23:13:11.279 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_data_din` is connected to async_mmap port `offchip_K.write_data`
+D1226 23:13:11.279 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_data_full_n` is connected to async_mmap port `offchip_K.write_data`
+D1226 23:13:11.279 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_data_write` is connected to async_mmap port `offchip_K.write_data`
+D1226 23:13:11.279 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_resp_s_dout` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.279 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_K_write_resp_peek_dout` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.279 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_resp_s_empty_n` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.280 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_K_write_resp_peek_empty_n` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.280 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_K_write_resp_s_read` is connected to async_mmap port `offchip_K.write_resp`
+D1226 23:13:11.280 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_addr_din` is connected to async_mmap port `offchip_Q.read_addr`
+D1226 23:13:11.280 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_addr_full_n` is connected to async_mmap port `offchip_Q.read_addr`
+D1226 23:13:11.280 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_addr_write` is connected to async_mmap port `offchip_Q.read_addr`
+D1226 23:13:11.280 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_data_s_dout` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.280 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_Q_read_data_peek_dout` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.281 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_data_s_empty_n` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.281 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_Q_read_data_peek_empty_n` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.281 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_read_data_s_read` is connected to async_mmap port `offchip_Q.read_data`
+D1226 23:13:11.281 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_addr_din` is connected to async_mmap port `offchip_Q.write_addr`
+D1226 23:13:11.281 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_addr_full_n` is connected to async_mmap port `offchip_Q.write_addr`
+D1226 23:13:11.281 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_addr_write` is connected to async_mmap port `offchip_Q.write_addr`
+D1226 23:13:11.282 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_data_din` is connected to async_mmap port `offchip_Q.write_data`
+D1226 23:13:11.282 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_data_full_n` is connected to async_mmap port `offchip_Q.write_data`
+D1226 23:13:11.282 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_data_write` is connected to async_mmap port `offchip_Q.write_data`
+D1226 23:13:11.282 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_resp_s_dout` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.282 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_Q_write_resp_peek_dout` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.282 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_resp_s_empty_n` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.282 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_Q_write_resp_peek_empty_n` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.283 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_Q_write_resp_s_read` is connected to async_mmap port `offchip_Q.write_resp`
+D1226 23:13:11.283 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_addr_din` is connected to async_mmap port `offchip_V.read_addr`
+D1226 23:13:11.283 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_addr_full_n` is connected to async_mmap port `offchip_V.read_addr`
+D1226 23:13:11.283 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_addr_write` is connected to async_mmap port `offchip_V.read_addr`
+D1226 23:13:11.283 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_data_s_dout` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.283 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_V_read_data_peek_dout` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.283 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_data_s_empty_n` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.284 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_V_read_data_peek_empty_n` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.284 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_read_data_s_read` is connected to async_mmap port `offchip_V.read_data`
+D1226 23:13:11.284 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_addr_din` is connected to async_mmap port `offchip_V.write_addr`
+D1226 23:13:11.284 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_addr_full_n` is connected to async_mmap port `offchip_V.write_addr`
+D1226 23:13:11.284 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_addr_write` is connected to async_mmap port `offchip_V.write_addr`
+D1226 23:13:11.284 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_data_din` is connected to async_mmap port `offchip_V.write_data`
+D1226 23:13:11.285 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_data_full_n` is connected to async_mmap port `offchip_V.write_data`
+D1226 23:13:11.285 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_data_write` is connected to async_mmap port `offchip_V.write_data`
+D1226 23:13:11.285 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_resp_s_dout` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.285 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_V_write_resp_peek_dout` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.285 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_resp_s_empty_n` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.285 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.offchip_V_write_resp_peek_empty_n` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.285 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.offchip_V_write_resp_s_read` is connected to async_mmap port `offchip_V.write_resp`
+D1226 23:13:11.286 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_addr_din` is connected to async_mmap port `out_glb.read_addr`
+D1226 23:13:11.286 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_addr_full_n` is connected to async_mmap port `out_glb.read_addr`
+D1226 23:13:11.286 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_addr_write` is connected to async_mmap port `out_glb.read_addr`
+D1226 23:13:11.286 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_data_s_dout` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.286 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.out_glb_read_data_peek_dout` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.286 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_data_s_empty_n` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.287 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.out_glb_read_data_peek_empty_n` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.287 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_read_data_s_read` is connected to async_mmap port `out_glb.read_data`
+D1226 23:13:11.287 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_addr_din` is connected to async_mmap port `out_glb.write_addr`
+D1226 23:13:11.287 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_addr_full_n` is connected to async_mmap port `out_glb.write_addr`
+D1226 23:13:11.287 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_addr_write` is connected to async_mmap port `out_glb.write_addr`
+D1226 23:13:11.287 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_data_din` is connected to async_mmap port `out_glb.write_data`
+D1226 23:13:11.288 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_data_full_n` is connected to async_mmap port `out_glb.write_data`
+D1226 23:13:11.288 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_data_write` is connected to async_mmap port `out_glb.write_data`
+D1226 23:13:11.288 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_resp_s_dout` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.288 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.out_glb_write_resp_peek_dout` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.288 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_resp_s_empty_n` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.288 tapa.verilog.xilinx.async_mmap:81] `attention_top_0.out_glb_write_resp_peek_empty_n` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.288 tapa.verilog.xilinx.async_mmap:71] `attention_top_0.out_glb_write_resp_s_read` is connected to async_mmap port `out_glb.write_resp`
+D1226 23:13:11.289 tapa.core:669]     pipelined signal: cycle_count_slr_0 => measure_cycle_0___cycle_count
+W1226 23:13:11.289 tapa.verilog.xilinx.module:222] assuming fifo_fin is a singleton array
+W1226 23:13:11.289 tapa.verilog.xilinx.module:222] assuming fifo_fin_peek is a singleton array
+W1226 23:13:11.289 tapa.verilog.xilinx.module:222] assuming fifo_fin is a singleton array
+W1226 23:13:11.289 tapa.verilog.xilinx.module:222] assuming fifo_fin_peek is a singleton array
+W1226 23:13:11.290 tapa.verilog.xilinx.module:222] assuming fifo_fin is a singleton array
+W1226 23:13:11.290 tapa.verilog.xilinx.module:222] assuming fifo_fin_peek is a singleton array
+D1226 23:13:11.290 tapa.core:850] Set the address width of async_mmap to 64
+I1226 23:13:11.405 tapa.core:463] generating report
+I1226 23:13:11.409 tapa.core:471] writing generated auxiliary RTL files
+I1226 23:13:11.410 tapa.steps.common:92] writing TAPA settings to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/work.out/run-1/run/settings.json`.
+I1226 23:13:11.411 tapa.steps.common:46] reusing TAPA settings from upstream flows.
+I1226 23:13:11.412 tapa.core:479] packaging RTL code
+D1226 23:13:11.412 tapa.verilog.xilinx:70] RTL ports of selfAttention:
+D1226 23:13:11.412 tapa.verilog.xilinx:75]   cat: Cat.MMAP, name: in_glb, ctype: vec_t*, width: 128, chan_count: None, chan_size: None
+D1226 23:13:11.412 tapa.verilog.xilinx:75]   cat: Cat.MMAP, name: WQ_glb, ctype: vec_t*, width: 128, chan_count: None, chan_size: None
+D1226 23:13:11.412 tapa.verilog.xilinx:75]   cat: Cat.MMAP, name: WK_glb, ctype: vec_t*, width: 128, chan_count: None, chan_size: None
+D1226 23:13:11.412 tapa.verilog.xilinx:75]   cat: Cat.MMAP, name: WV_glb, ctype: vec_t*, width: 128, chan_count: None, chan_size: None
+D1226 23:13:11.412 tapa.verilog.xilinx:75]   cat: Cat.MMAP, name: offchip_Q, ctype: vec_t*, width: 128, chan_count: None, chan_size: None
+D1226 23:13:11.412 tapa.verilog.xilinx:75]   cat: Cat.MMAP, name: offchip_K, ctype: vec_t*, width: 128, chan_count: None, chan_size: None
+D1226 23:13:11.412 tapa.verilog.xilinx:75]   cat: Cat.MMAP, name: offchip_V, ctype: vec_t*, width: 128, chan_count: None, chan_size: None
+D1226 23:13:11.412 tapa.verilog.xilinx:75]   cat: Cat.MMAP, name: out_glb, ctype: vec_t*, width: 128, chan_count: None, chan_size: None
+D1226 23:13:11.413 tapa.verilog.xilinx:75]   cat: Cat.MMAP, name: cycle_count, ctype: int*, width: 32, chan_count: None, chan_size: None
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_S_V_RAM_AUTO_1R1W.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_acc_RAM_AUTO_1R1W.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_12.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_15.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_285_1.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_299_5.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_308_6.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_321_7.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_338_11.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_347_12.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_360_13.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_377_17.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_386_18.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_38_1_VITIS_LOOP_39_2.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_399_19.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_425_24.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_460_29.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_VITIS_LOOP_467_30.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_attention_top_Pipeline_read_input_loop.v
+D1226 23:13:11.414 haoda.backend.xilinx:163] packing: attention_top_fadd_32ns_32ns_32_7_full_dsp_1.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_fadd_32ns_32ns_32_7_full_dsp_1_ip.tcl
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_fdiv_32ns_32ns_32_12_no_dsp_1.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_fdiv_32ns_32ns_32_12_no_dsp_1_ip.tcl
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_fexp_32ns_32ns_32_14_full_dsp_1.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_fexp_32ns_32ns_32_14_full_dsp_1_ip.tcl
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_flow_control_loop_pipe_sequential_init.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_fmul_32ns_32ns_32_4_max_dsp_1.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_fmul_32ns_32ns_32_4_max_dsp_1_ip.tcl
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_input_RAM_AUTO_2R1W.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_mac_muladd_16s_16s_16ns_16_4_1.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_mul_mul_16s_16s_16_4_1.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_sitofp_32s_32_5_no_dsp_1.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_sitofp_32s_32_5_no_dsp_1_ip.tcl
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_softmax_row.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_softmax_row_Pipeline_VITIS_LOOP_18_1.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_softmax_row_Pipeline_VITIS_LOOP_22_2.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_tmp_q_RAM_AUTO_1R1W.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: attention_top_tmp_v_RAM_AUTO_1R1W.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: measure_cycle.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: measure_cycle_cycle_count_m_axi.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: measure_cycle_flow_control_loop_pipe_sequential_init.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: measure_cycle_measure_cycle_Pipeline_measure_cycle_loop.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: selfAttention.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: selfAttention_control_s_axi.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: arbiter.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: async_mmap.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: axi_pipeline.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: axi_crossbar_addr.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: axi_crossbar_rd.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: axi_crossbar_wr.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: axi_crossbar.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: axi_register_rd.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: axi_register_wr.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: detect_burst.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: fifo.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: fifo_bram.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: fifo_fwd.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: fifo_srl.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: generate_last.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: priority_encoder.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: relay_station.v
+D1226 23:13:11.415 haoda.backend.xilinx:163] packing: a_axi_write_broadcastor_1_to_3.v
+D1226 23:13:11.416 haoda.backend.xilinx:163] packing: a_axi_write_broadcastor_1_to_4.v
+D1226 23:13:11.416 haoda.backend.xilinx:163] packing: selfAttention_fsm.v
+D1226 23:13:11.416 haoda.backend.xilinx:163] packing: selfAttention_inner.v
+I1226 23:13:41.899 tapa.core:487] packaging HLS report
+D1226 23:13:41.903 tapa.core:492]   packing report/attention_top_Pipeline_12_csynth.xml
+D1226 23:13:41.904 tapa.core:492]   packing report/attention_top_Pipeline_15_csynth.xml
+D1226 23:13:41.906 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_285_1_csynth.xml
+D1226 23:13:41.907 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_299_5_csynth.xml
+D1226 23:13:41.909 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_308_6_csynth.xml
+D1226 23:13:41.910 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_321_7_csynth.xml
+D1226 23:13:41.911 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_338_11_csynth.xml
+D1226 23:13:41.913 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_347_12_csynth.xml
+D1226 23:13:41.914 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_360_13_csynth.xml
+D1226 23:13:41.915 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_377_17_csynth.xml
+D1226 23:13:41.916 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_386_18_csynth.xml
+D1226 23:13:41.917 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_38_1_VITIS_LOOP_39_2_csynth.xml
+D1226 23:13:41.918 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_399_19_csynth.xml
+D1226 23:13:41.919 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_425_24_csynth.xml
+D1226 23:13:41.920 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_460_29_csynth.xml
+D1226 23:13:41.921 tapa.core:492]   packing report/attention_top_Pipeline_VITIS_LOOP_467_30_csynth.xml
+D1226 23:13:41.922 tapa.core:492]   packing report/attention_top_Pipeline_read_input_loop_csynth.xml
+D1226 23:13:41.923 tapa.core:492]   packing report/attention_top_csynth.xml
+D1226 23:13:41.925 tapa.core:492]   packing report/softmax_row_Pipeline_VITIS_LOOP_18_1_csynth.xml
+D1226 23:13:41.926 tapa.core:492]   packing report/softmax_row_Pipeline_VITIS_LOOP_22_2_csynth.xml
+D1226 23:13:41.927 tapa.core:492]   packing report/softmax_row_csynth.xml
+D1226 23:13:41.927 tapa.core:492]   packing report/measure_cycle_Pipeline_measure_cycle_loop_csynth.xml
+D1226 23:13:41.928 tapa.core:492]   packing report/measure_cycle_csynth.xml
+D1226 23:13:41.930 tapa.core:492]   packing report/selfAttention_csynth.xml
+I1226 23:13:42.094 tapa.core:495] generated the v++ xo file at ./work.out/run-1/design-point.xo
+I1226 23:13:42.095 tapa.bitstream:73] use the original connectivity configuration at /home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/sequential_hbm_config.ini in the v++ script
+I1226 23:13:42.095 tapa.steps.pack:61] generate the v++ script at ./work.out/run-1/generate-bitstream.sh
