@@ -15,7 +15,7 @@ FIXME: This host is from intrra host.
 
 #define N 256
 #define D 1024
-#define VEC_LEN 16
+#define VEC_LEN 8
 
 constexpr int D_head = 1024;
 constexpr int input_size = N * (D / VEC_LEN);
@@ -41,25 +41,6 @@ using aligned_vector = std::vector<T, tapa::aligned_allocator<T>>;
 
 DEFINE_string(bitstream, "", "path to bitstream file");
 
-// void to_column_major(const type_t in[D][D], vec_t (&out)[D/VEC_LEN][D]){
-//     for (int i = 0; i < D / VEC_LEN; i++){
-//         for (int j = 0; j < D; j++){
-//             for (int k = 0; k < VEC_LEN; k++){
-//                 out[i][j][k] = in[i*VEC_LEN + k][j];
-//             }
-//         }
-//     }
-// }
-
-// void input_to_tiled(const type_t in[N][D], vec_t (&out)[N][D/VEC_LEN]){
-//     for (int i = 0; i < N; i++){
-//         for (int j = 0; j < D / VEC_LEN; j++){
-//             for (int k = 0; k < VEC_LEN; k++){
-//                 out[i][j][k] = in[i][j*VEC_LEN + k];
-//             }
-//         }
-//     }
-// }
 
 int main(int argc, char *argv[]){
     FLAGS_logtostderr = true;

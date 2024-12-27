@@ -7,7 +7,7 @@ using namespace std;
 
 #define N 256
 #define D 1024
-#define VEC_LEN 16
+#define VEC_LEN 8
 #define SCALE_FACTOR 32
 
 typedef ap_int<16> type_t;
