@@ -8,6 +8,7 @@ using namespace std;
 #define N 256
 #define D 1024
 #define VEC_LEN 16
+#define SCALE_FACTOR 32
 
 typedef ap_int<64> type_t;
 using vec_t = tapa::vec_t<type_t, VEC_LEN>;
@@ -31,39 +32,36 @@ void measure_cycle(tapa::istreams<bool, 1>& fifo_fin, tapa::mmap<int> cycle_coun
 
 // Helper function to apply softmax to a vector
 void softmax_row(
-    type_t (&input)[N],
-    type_t (&output)[N]
+    type_t (&input)[N]
 ) {
     float sum = 0.0;
 
     for (size_t i = 0; i < N; ++i) {
-        output[i] = (type_t) exp(float(input[i]));
-        sum += output[i];
+        input[i] = (type_t) exp(float(input[i]));
+        sum += input[i];
     }
     for (size_t i = 0; i < N; ++i) {
-        output[i] = output[i] / sum;
+        input[i] = input[i] / sum * SCALE_FACTOR;
     }
 }
 
 // Helper function to apply softmax row-wise on a matrix
 void softmax(
-    type_t (&input_mtx)[N][N],
-    type_t (&output_mtx)[N][N]
+    type_t (&input_mtx)[N][N]
 ) {
     for (size_t i = 0; i < N; ++i) {
-        softmax_row(input_mtx[i], output_mtx[i]);
+        softmax_row(input_mtx[i]);
     }
 }
 
 
 void scale(
     type_t (&input_mtx)[N][N],
-    type_t (&output_mtx)[N][N]
+    const type_t scale_factor
 ) {
-    type_t scale = sqrt(D);
     for (size_t i = 0; i < N; ++i) {
         for (size_t j = 0; j < N; ++j) {
-            output_mtx[i][j] = input_mtx[i][j] / scale; // scaled attention
+            input_mtx[i][j] = input_mtx[i][j] / scale_factor; // scaled attention
         }
     }
 }
@@ -281,12 +279,12 @@ void attention_top(
 
     LOG(INFO) << "S computed";
 
-    // softmax(S)
-    // softmax(S, S);
-    // LOG(INFO) << "S softmaxed";
+    scale(S, sqrt(D));  // scale the attention scores
+    softmax(S);
+
+    LOG(INFO) << "S softmaxed";
 
     // output = S * V
-    
     for (int j = 0; j < D / VEC_LEN;){
         vec_t tmp_v[N];
         vec_t tmp_out[N];
@@ -307,6 +305,7 @@ void attention_top(
                 for (int k = 0; k < N; k++){
                     tmp_out[i][j] += S[i][k] * tmp_v[k][j];
                 }
+                tmp_out[i][j] = tmp_out[i][j] / SCALE_FACTOR;  // add back the scaling in the softmax
             }
         }
 
