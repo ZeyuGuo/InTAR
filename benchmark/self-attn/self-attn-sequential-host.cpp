@@ -21,7 +21,7 @@ constexpr int D_head = 1024;
 constexpr int input_size = N * (D / VEC_LEN);
 constexpr int output_size = N * D_head / 32;
 
-using type_t = ap_int<64>;
+using type_t = ap_int<16>;
 using vec_t = tapa::vec_t<type_t, VEC_LEN>;
 
 void selfAttention(

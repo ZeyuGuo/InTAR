@@ -1,7 +1,7 @@
 #include <iostream>
 #include <ap_int.h>
 #include <tapa.h>
-#include <glog/logging.h>
+// #include <glog/logging.h>
 
 using namespace std;
 
@@ -10,7 +10,7 @@ using namespace std;
 #define VEC_LEN 16
 #define SCALE_FACTOR 32
 
-typedef ap_int<64> type_t;
+typedef ap_int<16> type_t;
 using vec_t = tapa::vec_t<type_t, VEC_LEN>;
 
 void measure_cycle(tapa::istreams<bool, 1>& fifo_fin, tapa::mmap<int> cycle_count){
@@ -105,7 +105,7 @@ void attention_top(
         }
     }
 
-    LOG(INFO) << "Input read and cached";
+    // LOG(INFO) << "Input read and cached";
 
     vec_t acc[N];
     // initialize acc to 0
@@ -155,7 +155,7 @@ void attention_top(
         }
     }
 
-    LOG(INFO) << "Q computed";
+    // LOG(INFO) << "Q computed";
 
     // K = WK * input
     for (int j = 0; j < D;){
@@ -198,7 +198,7 @@ void attention_top(
         }
     }
 
-    LOG(INFO) << "K computed";
+    // LOG(INFO) << "K computed";
 
     // V = WV * input
     for (int j = 0; j < D;){
@@ -241,7 +241,7 @@ void attention_top(
         }
     }
 
-    LOG(INFO) << "V computed";
+    // LOG(INFO) << "V computed";
 
     // scores = Q * K^T
     vec_t tmp_q[D / VEC_LEN];
@@ -277,12 +277,12 @@ void attention_top(
         }
     }
 
-    LOG(INFO) << "S computed";
+    // LOG(INFO) << "S computed";
 
     scale(S, sqrt(D));  // scale the attention scores
     softmax(S);
 
-    LOG(INFO) << "S softmaxed";
+    // LOG(INFO) << "S softmaxed";
 
     // output = S * V
     for (int j = 0; j < D / VEC_LEN;){
@@ -325,7 +325,7 @@ void attention_top(
         j++;
     }
 
-    LOG(INFO) << "Output computed";
+    // LOG(INFO) << "Output computed";
 
     // terminate the kernel
     fifo_fin.write(true);
