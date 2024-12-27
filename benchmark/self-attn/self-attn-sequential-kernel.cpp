@@ -207,7 +207,7 @@ void attention_top(
     for (int j = 0; j < D;){
         vec_t acc[D];
         for (int k_req = 0, k_resp = 0; k_resp < D / VEC_LEN;){
-            if (k_req < D / VEC_LEN && k_req < D && !WQ_glb.read_addr.full()){
+            if (k_req < D / VEC_LEN && !WQ_glb.read_addr.full()){
                 WQ_glb.read_addr.write(j * D / VEC_LEN + k_req);
                 k_req++;
                 
@@ -244,7 +244,7 @@ void attention_top(
     for (int j = 0; j < D;){
         vec_t acc[D];
         for (int k_req = 0, k_resp = 0; k_resp < D / VEC_LEN;){
-            if (k_req < D / VEC_LEN && k_req < D && !WK_glb.read_addr.full()){
+            if (k_req < D / VEC_LEN && !WK_glb.read_addr.full()){
                 WK_glb.read_addr.write(j * D / VEC_LEN + k_req);
                 k_req++;
                 
@@ -281,7 +281,7 @@ void attention_top(
     for (int j = 0; j < D;){
         vec_t acc[D];
         for (int k_req = 0, k_resp = 0; k_resp < D / VEC_LEN;){
-            if (k_req < D / VEC_LEN && k_req < D && !WV_glb.read_addr.full()){
+            if (k_req < D / VEC_LEN && !WV_glb.read_addr.full()){
                 WV_glb.read_addr.write(j * D / VEC_LEN + k_req);
                 k_req++;
                 
@@ -320,7 +320,7 @@ void attention_top(
     for (int i = 0; i < N; i++){
         // first cache all the q row
         for (int kq_req = 0, kq_resp = 0; kq_resp < D / VEC_LEN;){
-            if (kq_req < D / VEC_LEN && kq_req < D && !offchip_Q.read_addr.full()){
+            if (kq_req < D / VEC_LEN && !offchip_Q.read_addr.full()){
                 offchip_Q.read_addr.write(i * (D / VEC_LEN) + kq_req);
                 kq_req++;
             }
@@ -335,7 +335,7 @@ void attention_top(
 
             // accumulate according to the k column read
             for (int kk_req = 0, kk_resp = 0; kk_resp < D / VEC_LEN;){
-                if (kk_req < D / VEC_LEN && kk_req < D && !offchip_K.read_addr.full()){
+                if (kk_req < D / VEC_LEN && !offchip_K.read_addr.full()){
                     offchip_K.read_addr.write(j * (D / VEC_LEN) + kk_req);
                     kk_req++;
                 }
@@ -355,7 +355,47 @@ void attention_top(
     // LOG(INFO) << "S softmaxed";
 
     // output = S * V
+    
+    for (int j = 0; j < D / VEC_LEN;){
+        vec_t tmp_v[N];
+        vec_t tmp_out[N];
+        for (int i_req = 0, i_resp = 0; i_resp < N;){
+            if (i_req < N && !offchip_V.read_addr.full()){
+                offchip_V.read_addr.write(i_req * (D / VEC_LEN) + j);
+                i_req++;
+            }
+            bool v_success = offchip_V.read_data.try_read(tmp_v[i_resp]);
+            if (v_success){
+                i_resp++;
+            }
+        }
+        // compute a matrix mult between S and tmp_v with dimension N by N and N by D / VEC_LEN respectively
+        for (int i = 0; i < N; i++){
+            for (int j = 0; j < D / VEC_LEN; j++){
+                tmp_out[i][j] = 0;
+                for (int k = 0; k < N; k++){
+                    tmp_out[i][j] += S[i][k] * tmp_v[k][j];
+                }
+            }
+        }
 
+        // write to output
+        for (int i_req = 0, i_resp = 0; i_resp < N;){
+            if (i_req < N && !out_glb.write_addr.full() && !out_glb.write_data.full()){
+                out_glb.write_addr.write(i_req * (D / VEC_LEN) + j);
+                out_glb.write_data.try_write(tmp_out[i_req]);
+                i_req++;
+            }
+            bool success = false;
+            auto resp = out_glb.write_resp.read(success);
+            if(success){
+                i_resp += unsigned(resp)+1;
+            }
+        }
+        j++;
+    }
+
+    LOG(INFO) << "Output computed";
 }
 
 // Self-attention computation
