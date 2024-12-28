@@ -3,6 +3,8 @@
 #include <tapa.h>
 #include <hls_vector.h>
 #include <hls_math.h>
+// #include <glog/logging.h>
+#include <string>
 
 using namespace std;
 
@@ -42,7 +44,8 @@ void measure_cycle(tapa::istreams<bool, MEASURE_CYCLE_COUNT>& fifo_fin, tapa::mm
  */
 void read_weight(
     tapa::async_mmap<vec_t>& vec,
-    tapa::ostreams<vec_t, D / VEC_LEN>& fifo_out
+    tapa::ostreams<vec_t, D / VEC_LEN>& fifo_out,
+    const string weight_name
 ){
     vec_t row[D / VEC_LEN];
     hls::vector<bool, D/VEC_LEN> written;
@@ -57,6 +60,7 @@ void read_weight(
             }
             bool success = vec.read_data.try_read(row[i_resp]);
             if(success){
+                // LOG(INFO) << "read " << weight_name << " vector: " << i * D / VEC_LEN + i_resp << " out of " << D * D / VEC_LEN - 1;
                 i_resp++;
             }
         }
@@ -84,7 +88,8 @@ void read_weight(
  */
 void read_input(
     tapa::async_mmap<vec_t>& vec,
-    tapa::ostreams<vec_t, N / VEC_LEN>& fifo_out
+    tapa::ostreams<vec_t, N / VEC_LEN>& fifo_out,
+    const string weight_name
 ){
     vec_t col[N / VEC_LEN];
     hls::vector<bool, N/VEC_LEN> written;
@@ -99,7 +104,7 @@ void read_input(
             }
             bool success = vec.read_data.try_read(col[i_resp]);
             if(success){
-                // printf("read_input: %d\n", i * N / VEC_LEN + i_resp);
+                // LOG(INFO) << "read " << weight_name << " vector: " << i * N / VEC_LEN + i_resp << " out of " << N * N / VEC_LEN - 1;
                 i_resp++;
             }
         }
@@ -179,7 +184,8 @@ void write_output(
 void projection(
     tapa::istreams<vec_t, N / VEC_LEN>& input_in_fifo, 
     tapa::istreams<vec_t, D / VEC_LEN>& weight_in_fifo,
-    tapa::ostreams<vec_t, N / VEC_LEN>& output_out_fifo
+    tapa::ostreams<vec_t, N / VEC_LEN>& output_out_fifo,
+    const string projection_name
 ) {
     type_t result[N][D];  // break down result completely
 
@@ -235,10 +241,13 @@ void projection(
                 result[i][j] += input_col[i] * weight_row[j];
             }
         }
+
+        // LOG(INFO) << "Computed " << projection_name << " partial sum: " << k << " out of " << D-1;
     }
 
     // stream out the result column by column
     for(int j = 0; j < D; j++){
+        output_write = false;
         for(int i = 0; i < N / VEC_LEN;){
 #pragma HLS UNROLL
             if(!output_write[i] && !output_out_fifo[i].full()){
@@ -253,6 +262,8 @@ void projection(
                 }
             }
         }
+
+        // LOG(INFO) << "Written " << projection_name << " column: " << j << " out of " << D-1;
     }
 }
 
@@ -284,6 +295,8 @@ void compute_S(
 
     for (int k = 0; k < D; k++) {
 #pragma HLS PIPELINE II=1
+        q_read = false;
+        k_read = false;
         // readin a column of input
         for (int i = 0; i < N / VEC_LEN;){
 #pragma HLS UNROLL
@@ -317,10 +330,13 @@ void compute_S(
                 result[i][j] += q_col[i] * k_row[j];
             }
         }
+
+        // LOG(INFO) << "Computed " << "S" << " partial sum: " << k << " out of " << D-1;
     }
 
     // stream out the result row by row
     for(int i = 0; i < N; i++){
+        output_write = false;
         for(int j = 0; j < N / VEC_LEN;){
 #pragma HLS UNROLL
             if(!output_write[j] && !output_out_fifo[j].full()){
@@ -336,6 +352,8 @@ void compute_S(
                 }
             }
         }
+
+        // LOG(INFO) << "Written " << "S" << " row: " << i << " out of " << N-1;
     }
 }
 
@@ -369,6 +387,7 @@ void compute_output(
 
     // readin and cache S'
     for(int i = 0; i < N; i++){
+        s_read = false;
         for(int j = 0; j < N / VEC_LEN;){
 #pragma HLS UNROLL
             if(!s_in_fifo[j].empty() && !s_read[j]){
@@ -384,8 +403,9 @@ void compute_output(
         }
     }
 
-    for (int j = 0; j < D;) {  // for column j in output
+    for (int j = 0; j < D; j++) {  // for column j in output
 #pragma HLS PIPELINE II=1
+        v_read = false;
         // readin a column of input
         for (int i = 0; i < N / VEC_LEN;){
 #pragma HLS UNROLL
@@ -406,10 +426,13 @@ void compute_output(
                 result[i][j] += S[i][k] * v_col[k];
             }
             result[i][j] = result[i][j] / SCALE_FACTOR;  // scale down the result by SCALE_FACTOR
+            // LOG(INFO) << "Computed " << "Output" << " (" << i << ", " << j << ") out of (" << N-1 << ", " << D-1 << ")";
         }
     }
 
+    // stream out the result row by row
     for(int i = 0; i < N; i++){
+        output_write = false;
         for(int j = 0; j < D / VEC_LEN;){
 #pragma HLS UNROLL
             if(!output_write[j] && !output_out_fifo[j].full()){
@@ -425,6 +448,8 @@ void compute_output(
                 }
             }
         }
+
+        // LOG(INFO) << "Written " << "Output" << " row: " << i << " out of " << N-1;
     }
 }
 
@@ -461,6 +486,7 @@ void softmax(tapa::istreams<vec_t, N / VEC_LEN>& s_in_fifo, tapa::ostreams<vec_t
     hls::vector<type_t, N> row;
     hls::vector<type_t, N> output;
     for (int i = 0; i < N; i++){
+        read = false;
         // readin a row of S from streams
         for (int j = 0; j < N / VEC_LEN;){
 #pragma HLS UNROLL
@@ -476,6 +502,8 @@ void softmax(tapa::istreams<vec_t, N / VEC_LEN>& s_in_fifo, tapa::ostreams<vec_t
             }
         }
 
+        // LOG(INFO) << "Read " << "S" << " row: " << i << " out of " << N-1;
+
         // scale row
         for (int j = 0; j < N; j++){
             row[j] = row[j] / sqrt(D);
@@ -484,8 +512,11 @@ void softmax(tapa::istreams<vec_t, N / VEC_LEN>& s_in_fifo, tapa::ostreams<vec_t
         // apply softmax row-wise
         softmax_row(row, output);
 
+        // LOG(INFO) << "Computed " << "Softmax of S" << " row: " << i << " out of " << N-1;
+
         // readin a row of output to streams
         for(int j = 0; j < N / VEC_LEN;){
+            write = false;
 #pragma HLS UNROLL
             if(!write[j] && !output_out_fifo[j].full()){
                 vec_t tmp_output;
@@ -500,6 +531,8 @@ void softmax(tapa::istreams<vec_t, N / VEC_LEN>& s_in_fifo, tapa::ostreams<vec_t
                 }
             }
         }
+
+        // LOG(INFO) << "Written " << "S\'" << " row: " << i << " out of " << N-1;
     }
 }
 
@@ -533,17 +566,17 @@ void selfAttention(
 
     // Step 1: Compute Query, Key, and Value matrices
     tapa::task()
-        .invoke<tapa::join>(read_input, top_input, fifo_input_Q)  // read input and distribute to Q
-        .invoke<tapa::join>(read_input, top_input, fifo_input_K)  // read input and distribute to K
-        .invoke<tapa::join>(read_input, top_input, fifo_input_V)  // read input and distribute to V
+        .invoke<tapa::join>(read_input, top_input, fifo_input_Q, "input_Q")  // read input and distribute to Q
+        .invoke<tapa::join>(read_input, top_input, fifo_input_K, "input_K")  // read input and distribute to K
+        .invoke<tapa::join>(read_input, top_input, fifo_input_V, "input_V")  // read input and distribute to V
 
-        .invoke<tapa::join>(read_weight, Wq, fifo_Wq)  // read Wq
-        .invoke<tapa::join>(read_weight, Wk, fifo_Wk)  // read Wk
-        .invoke<tapa::join>(read_weight, Wv, fifo_Wv)  // read Wv
+        .invoke<tapa::join>(read_weight, Wq, fifo_Wq, "weight_Q")  // read Wq
+        .invoke<tapa::join>(read_weight, Wk, fifo_Wk, "weight_K")  // read Wk
+        .invoke<tapa::join>(read_weight, Wv, fifo_Wv, "weight_V")  // read Wv
 
-        .invoke<tapa::join>(projection, fifo_input_Q, fifo_Wq, fifo_Q)  // Q = X * Wq
-        .invoke<tapa::join>(projection, fifo_input_K, fifo_Wk, fifo_K)  // K = X * Wk
-        .invoke<tapa::join>(projection, fifo_input_V, fifo_Wv, fifo_V)  // V = X * Wv
+        .invoke<tapa::join>(projection, fifo_input_Q, fifo_Wq, fifo_Q, "Q")  // Q = X * Wq
+        .invoke<tapa::join>(projection, fifo_input_K, fifo_Wk, fifo_K, "K")  // K = X * Wk
+        .invoke<tapa::join>(projection, fifo_input_V, fifo_Wv, fifo_V, "V")  // V = X * Wv
         .invoke<tapa::join>(compute_S, fifo_Q, fifo_K, fifo_S)  // S = Q * K^T
 
         .invoke<tapa::join>(softmax, fifo_S, fifo_S_softmax)  // S' = Softmax(S)
