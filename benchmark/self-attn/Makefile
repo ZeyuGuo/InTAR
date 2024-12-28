@@ -102,7 +102,7 @@ build_spatial_hw_emu:
 	sed -i '3s/.*/TARGET=hw_emu/' generate-bitstream.sh; \
 	bash generate-bitstream.sh
 	mkdir -p bitstreams/; \
-	cp work.out/run-1/vitis_run_hw_emu/self_attn_spatial_$(PLATFORM).xclbin bitstreams/self_attn_spatial_$(PLATFORM)_hw_emu.xclbin
+	cp work.out/run-1/vitis_run_hw_emu/selfAttention_$(PLATFORM).xclbin bitstreams/self_attn_spatial_$(PLATFORM)_hw_emu.xclbin
 
 .PHONY: build_spatial_hw
 build_spatial_hw:
@@ -111,7 +111,7 @@ build_spatial_hw:
 	sed -i '3s/.*/# TARGET=hw_emu/' generate-bitstream.sh; \
 	bash generate-bitstream.sh
 	mkdir -p bitstreams/; \
-	cp work.out/run-1/vitis_run_hw/self_attn_spatial_$(PLATFORM).xclbin bitstreams/self_attn_spatial_$(PLATFORM)_hw.xclbin
+	cp work.out/run-1/vitis_run_hw/selfAttention_$(PLATFORM).xclbin bitstreams/self_attn_spatial_$(PLATFORM)_hw.xclbin
 
 
 .PHONY: build_sequential
@@ -142,7 +142,7 @@ build_sequential_hw_emu:
 	sed -i '3s/.*/TARGET=hw_emu/' generate-bitstream.sh; \
 	bash generate-bitstream.sh
 	mkdir -p bitstreams/; \
-	cp work.out/run-1/vitis_run_hw_emu/self_attn_sequential_$(PLATFORM).xclbin bitstreams/self_attn_sequential_$(PLATFORM)_hw_emu.xclbin
+	cp work.out/run-1/vitis_run_hw_emu/selfAttention_$(PLATFORM).xclbin bitstreams/self_attn_sequential_$(PLATFORM)_hw_emu.xclbin
 
 .PHONY: build_sequential_hw
 build_sequential_hw:
@@ -151,7 +151,7 @@ build_sequential_hw:
 	sed -i '3s/.*/# TARGET=hw_emu/' generate-bitstream.sh; \
 	bash generate-bitstream.sh
 	mkdir -p bitstreams/; \
-	cp work.out/run-1/vitis_run_hw/self_attn_sequential_$(PLATFORM).xclbin bitstreams/self_attn_sequential_$(PLATFORM)_hw.xclbin
+	cp work.out/run-1/vitis_run_hw/selfAttention_$(PLATFORM).xclbin bitstreams/self_attn_sequential_$(PLATFORM)_hw.xclbin
 
 
 self-attn: self-attn.cpp
