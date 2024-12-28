@@ -4,7 +4,6 @@
 #include <hls_vector.h>
 #include <hls_math.h>
 // #include <glog/logging.h>
-#include <string>
 
 using namespace std;
 
@@ -44,8 +43,7 @@ void measure_cycle(tapa::istreams<bool, MEASURE_CYCLE_COUNT>& fifo_fin, tapa::mm
  */
 void read_weight(
     tapa::async_mmap<vec_t>& vec,
-    tapa::ostreams<vec_t, D / VEC_LEN>& fifo_out,
-    const string weight_name
+    tapa::ostreams<vec_t, D / VEC_LEN>& fifo_out
 ){
     vec_t row[D / VEC_LEN];
     hls::vector<bool, D/VEC_LEN> written;
@@ -88,8 +86,7 @@ void read_weight(
  */
 void read_input(
     tapa::async_mmap<vec_t>& vec,
-    tapa::ostreams<vec_t, N / VEC_LEN>& fifo_out,
-    const string weight_name
+    tapa::ostreams<vec_t, N / VEC_LEN>& fifo_out
 ){
     vec_t col[N / VEC_LEN];
     hls::vector<bool, N/VEC_LEN> written;
@@ -184,8 +181,7 @@ void write_output(
 void projection(
     tapa::istreams<vec_t, N / VEC_LEN>& input_in_fifo, 
     tapa::istreams<vec_t, D / VEC_LEN>& weight_in_fifo,
-    tapa::ostreams<vec_t, N / VEC_LEN>& output_out_fifo,
-    const string projection_name
+    tapa::ostreams<vec_t, N / VEC_LEN>& output_out_fifo
 ) {
     type_t result[N][D];  // break down result completely
 
@@ -566,17 +562,17 @@ void selfAttention(
 
     // Step 1: Compute Query, Key, and Value matrices
     tapa::task()
-        .invoke<tapa::join>(read_input, top_input, fifo_input_Q, "input_Q")  // read input and distribute to Q
-        .invoke<tapa::join>(read_input, top_input, fifo_input_K, "input_K")  // read input and distribute to K
-        .invoke<tapa::join>(read_input, top_input, fifo_input_V, "input_V")  // read input and distribute to V
+        .invoke<tapa::join>(read_input, top_input, fifo_input_Q)  // read input and distribute to Q
+        .invoke<tapa::join>(read_input, top_input, fifo_input_K)  // read input and distribute to K
+        .invoke<tapa::join>(read_input, top_input, fifo_input_V)  // read input and distribute to V
 
-        .invoke<tapa::join>(read_weight, Wq, fifo_Wq, "weight_Q")  // read Wq
-        .invoke<tapa::join>(read_weight, Wk, fifo_Wk, "weight_K")  // read Wk
-        .invoke<tapa::join>(read_weight, Wv, fifo_Wv, "weight_V")  // read Wv
+        .invoke<tapa::join>(read_weight, Wq, fifo_Wq)  // read Wq
+        .invoke<tapa::join>(read_weight, Wk, fifo_Wk)  // read Wk
+        .invoke<tapa::join>(read_weight, Wv, fifo_Wv)  // read Wv
 
-        .invoke<tapa::join>(projection, fifo_input_Q, fifo_Wq, fifo_Q, "Q")  // Q = X * Wq
-        .invoke<tapa::join>(projection, fifo_input_K, fifo_Wk, fifo_K, "K")  // K = X * Wk
-        .invoke<tapa::join>(projection, fifo_input_V, fifo_Wv, fifo_V, "V")  // V = X * Wv
+        .invoke<tapa::join>(projection, fifo_input_Q, fifo_Wq, fifo_Q)  // Q = X * Wq
+        .invoke<tapa::join>(projection, fifo_input_K, fifo_Wk, fifo_K)  // K = X * Wk
+        .invoke<tapa::join>(projection, fifo_input_V, fifo_Wv, fifo_V)  // V = X * Wv
         .invoke<tapa::join>(compute_S, fifo_Q, fifo_K, fifo_S)  // S = Q * K^T
 
         .invoke<tapa::join>(softmax, fifo_S, fifo_S_softmax)  // S' = Softmax(S)
