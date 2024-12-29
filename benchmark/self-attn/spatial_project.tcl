@@ -26,3 +26,5 @@ add_files -tb "/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/self-attn-spatia
 close_project
 puts "HLS Project Successfully Created"
 exit
+
+# add tapa path to cflag
