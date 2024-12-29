@@ -452,7 +452,7 @@ void compute_output(
     }
 }
 
-
+// FIXME: funcitno argument can only be steam
 /**
  * @brief Conduct a softmax operation on a row of input
  * 
