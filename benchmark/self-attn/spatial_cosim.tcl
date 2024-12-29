@@ -1,4 +1,4 @@
-open_project self_attential_sequential
+open_project self_attential_spatial
 set_top selfAttention
 
 open_solution "solution1" -flow_target vitis

@@ -1,9 +1,9 @@
-open_project self_attential_sequential
+open_project self_attential_spatial
 set_top selfAttention
 
 # v++ -g, -D, -I, --advanced.prop kernel.seq_align_multiple_static.kernel_flags
-add_files "/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/self-attn-sequential-kernel.cpp" -cflags "-I ./include"
-add_files -tb "/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/self-attn-sequential-testbench.cpp" -cflags "-I ./include"
+add_files "/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/self-attn-spatial-kernel.cpp" -cflags "-I ./include"
+add_files -tb "/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/self-attn-spatial-testbench.cpp" -cflags "-I ./include"
 
 # The followings should be put in another script after reopening the project created. 
 # The problem is that we must close and reopen the project to successfully create a solution. There is a bug to create solution with tcl script. 

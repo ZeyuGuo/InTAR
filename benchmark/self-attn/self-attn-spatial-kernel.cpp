@@ -9,10 +9,11 @@ using namespace std;
 
 #define MEASURE_CYCLE_COUNT 1
 
-#define N 256   // N is the sequence length
-#define D 1024  // D is the dimension of the input
 #define VEC_LEN 16
 #define SCALE_FACTOR 32
+
+const int N = 256;
+const int D = 1024;
 
 typedef ap_int<16> type_t;
 typedef tapa::vec_t<type_t, VEC_LEN> vec_t;  // SIMD vector to use for the computation
@@ -51,7 +52,7 @@ void read_weight(
     for (int i = 0; i < D; i++){
         written = false;  // written is supposed to be a simd vector
         for(int i_req = 0, i_resp = 0; i_resp < D / VEC_LEN;){
-            #pragma HLS pipeline II=1 style=stp
+#pragma HLS pipeline II=1 style=stp
             if((i_req < D / VEC_LEN) & !vec.read_addr.full()){
                 vec.read_addr.write(i * D / VEC_LEN + i_req);
                 i_req++;
@@ -65,7 +66,7 @@ void read_weight(
 
         // write the row to streams
         for (int j = 0; j < D / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!written[j]){
                 bool success = fifo_out[j].try_write(row[j]);
                 if(success){
@@ -94,7 +95,7 @@ void read_input(
     for (int i = 0; i < D; i++){
         written = false;  // written is supposed to be a simd vector
         for(int i_req = 0, i_resp = 0; i_resp < N / VEC_LEN;){
-            #pragma HLS pipeline II=1 style=stp
+#pragma HLS pipeline II=1 style=stp
             if((i_req < N / VEC_LEN) & !vec.read_addr.full()){
                 vec.read_addr.write(i * N / VEC_LEN + i_req);
                 i_req++;
@@ -108,7 +109,7 @@ void read_input(
 
         // write the row to streams
         for (int j = 0; j < N / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!written[j]){
                 bool success = fifo_out[j].try_write(col[j]);
                 if(success){
@@ -138,7 +139,7 @@ void write_output(
     for (int i = 0; i < N; i++){
         read = false;
         for (int j = 0; j < D / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!read[j] && !fifo_in[j].empty()){
                 vec_t tmp;
                 fifo_in[j].read(tmp);
@@ -198,18 +199,19 @@ void projection(
     hls::vector<bool, N/VEC_LEN> output_write;
 
     for (int k = 0; k < D; k++) {
+#pragma HLS LOOP_TRIPCOUNT min=N max=N
 #pragma HLS PIPELINE II=1
         input_read = false;
         weight_read = false;
 
         // readin a column of input
         for (int i = 0; i < N / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!input_in_fifo[i].empty() && !input_read[i]){
                 vec_t tmp_input;
                 input_in_fifo[i].read(tmp_input);
                 for(int ii = 0; ii < VEC_LEN; ii++){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
                     input_col[i * VEC_LEN + ii] = tmp_input[ii];  // NOTE: Because VEC_LEN is power of 2, muliply is faster than add
                 }
                 input_read[i] = true;
@@ -219,12 +221,12 @@ void projection(
 
         // readin a row of weight
         for (int j = 0; j < D / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!weight_in_fifo[j].empty() && !weight_read[j]){
                 vec_t tmp_weight;
                 weight_in_fifo[j].read(tmp_weight);
                 for(int jj = 0; jj < VEC_LEN; jj++){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
                     weight_row[j * VEC_LEN + jj] = tmp_weight[jj];
                 }
                 weight_read[j] = true;
@@ -245,7 +247,7 @@ void projection(
     for(int j = 0; j < D; j++){
         output_write = false;
         for(int i = 0; i < N / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!output_write[i] && !output_out_fifo[i].full()){
                 vec_t tmp_output;
                 for(int ii = 0; ii < VEC_LEN; ii++){
@@ -290,12 +292,13 @@ void compute_S(
     hls::vector<bool, N/VEC_LEN> output_write;
 
     for (int k = 0; k < D; k++) {
+#pragma HLS LOOP_TRIPCOUNT min=D max=D
 #pragma HLS PIPELINE II=1
         q_read = false;
         k_read = false;
         // readin a column of input
         for (int i = 0; i < N / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!q_in_fifo[i].empty() && !q_read[i]){
                 vec_t tmp_q;
                 q_in_fifo[i].read(tmp_q);
@@ -309,7 +312,7 @@ void compute_S(
 
         // readin a row of weight
         for (int j = 0; j < N / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!k_in_fifo[j].empty() && !k_read[j]){
                 vec_t tmp_k;
                 k_in_fifo[j].read(tmp_k);
@@ -334,11 +337,11 @@ void compute_S(
     for(int i = 0; i < N; i++){
         output_write = false;
         for(int j = 0; j < N / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!output_write[j] && !output_out_fifo[j].full()){
                 vec_t tmp_output;
                 for(int jj = 0; jj < VEC_LEN; jj++){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
                     tmp_output[jj] = result[i][j * VEC_LEN + jj];
                 }
                 bool success = output_out_fifo[j].try_write(tmp_output);
@@ -385,12 +388,12 @@ void compute_output(
     for(int i = 0; i < N; i++){
         s_read = false;
         for(int j = 0; j < N / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!s_in_fifo[j].empty() && !s_read[j]){
                 vec_t tmp_s;
                 s_in_fifo[j].read(tmp_s);
                 for(int jj = 0; jj < VEC_LEN; jj++){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
                     S[i][j * VEC_LEN + jj] = tmp_s[jj];
                 }
                 s_read[j] = true;
@@ -404,12 +407,12 @@ void compute_output(
         v_read = false;
         // readin a column of input
         for (int i = 0; i < N / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!v_read[i] && !v_in_fifo[i].empty()){
                 vec_t tmp_v;
                 v_in_fifo[i].read(tmp_v);
                 for(int ii = 0; ii < VEC_LEN; ii++){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
                     v_col[i * VEC_LEN + ii] = tmp_v[ii];  // NOTE: Because VEC_LEN is power of 2, muliply is faster than add
                 }
                 v_read[i] = true;
@@ -430,11 +433,11 @@ void compute_output(
     for(int i = 0; i < N; i++){
         output_write = false;
         for(int j = 0; j < D / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!output_write[j] && !output_out_fifo[j].full()){
                 vec_t tmp_out;
                 for(int jj = 0; jj < VEC_LEN; jj++){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
                     tmp_out[jj] = result[i][j * VEC_LEN + jj];
                 }
                 bool success = output_out_fifo[j].try_write(tmp_out);
@@ -485,12 +488,12 @@ void softmax(tapa::istreams<vec_t, N / VEC_LEN>& s_in_fifo, tapa::ostreams<vec_t
         read = false;
         // readin a row of S from streams
         for (int j = 0; j < N / VEC_LEN;){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if (!read[j] && !s_in_fifo[j].empty()){
                 vec_t tmp;
                 s_in_fifo[j].read(tmp);
                 for(int jj = 0; jj < VEC_LEN; jj++){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
                     row[j * VEC_LEN + jj] = tmp[jj];
                 }
                 read[j] = true;
@@ -513,11 +516,11 @@ void softmax(tapa::istreams<vec_t, N / VEC_LEN>& s_in_fifo, tapa::ostreams<vec_t
         // readin a row of output to streams
         for(int j = 0; j < N / VEC_LEN;){
             write = false;
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
             if(!write[j] && !output_out_fifo[j].full()){
                 vec_t tmp_output;
                 for(int jj = 0; jj < VEC_LEN; jj++){
-#pragma HLS UNROLL
+// #pragma HLS UNROLL
                     tmp_output[jj] = output[j * VEC_LEN + jj];
                 }
                 bool success = output_out_fifo[j].try_write(tmp_output);
