@@ -13,8 +13,8 @@ FIXME: This host is from intrra host.
 #include <glog/logging.h>
 #include <ap_int.h>
 
-#define N 64
-#define D 256
+#define N 256
+#define D 1024
 #define VEC_LEN 16
 
 constexpr int D_head = 1024;

@@ -6,7 +6,6 @@ Bitstream run on hardware hangs.
     - Might Change datatype to float and recompile the bitstream. 
 
 2. Cosim finished (64, 256) with warning about DSP. 
-    - ?
 
 
 # Data Type
