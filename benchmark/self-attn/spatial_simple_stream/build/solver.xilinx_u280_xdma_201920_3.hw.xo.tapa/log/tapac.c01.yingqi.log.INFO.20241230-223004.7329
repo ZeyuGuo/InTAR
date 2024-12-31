@@ -1,0 +1,18 @@
+I1230 22:30:04.192 tapa.util:184] logging level set to INFO
+I1230 22:30:04.192 tapa.tapac:514] running translated command: `tapa dse-floorplan --input=self-attn-spatial-kernel.cpp --top=selfAttention --platform=xilinx_u280_xdma_201920_3 --connectivity=hbm_config_spatial.ini --enable-synth-util --enable-hbm-binding-adjustment --floorplan-output=build/solver.tcl --output=build/solver.xilinx_u280_xdma_201920_3.hw.xo --bitstream-script=build/solver.xilinx_u280_xdma_201920_3.hw_generate_bitstream.sh`
+I1230 22:30:04.194 tapa.util:184] logging level set to INFO
+I1230 22:30:04.194 tapa.tapa:54] tapa version: 0.0.20240301.1
+I1230 22:30:04.194 tapa.tapa:58] Python recursion limit set to 3000
+I1230 22:30:04.196 tapa.steps.dse:98] 
+I1230 22:30:04.196 tapa.steps.dse:99] --------------------------------------------------------------------------------
+I1230 22:30:04.196 tapa.steps.dse:100] DSE preparation: synthesize each task into RTL
+I1230 22:30:04.196 tapa.steps.dse:101] --------------------------------------------------------------------------------
+I1230 22:30:04.196 tapa.steps.dse:102] 
+I1230 22:30:04.354 tapa.steps.analyze:151] added vendor include path `/mnt/software/xilinx/Vitis_HLS/2021.2/include`
+I1230 22:30:04.354 tapa.steps.analyze:248] Running tapacc command: /usr/local/bin/tapacc /home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/spatial_simple_stream/work.out/csynth/flatten/flatten-4c7a6a15-self-attn-spatial-kernel.cpp -top selfAttention -- -std=c++17 -I /usr/local/lib/python3.10/dist-packages/tapa/../../../src -isystem /mnt/software/xilinx/Vitis_HLS/2021.2/include -stdlib=libc++ -isystem /usr/lib/llvm-17/include/c++/v1/ -isystem /usr/include/clang/17/include/ -isystem /usr/lib/clang/17/include/
+I1230 22:30:16.415 tapa.steps.common:92] writing TAPA graph to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/spatial_simple_stream/work.out/csynth/graph.json`.
+I1230 22:30:16.972 tapa.steps.common:92] writing TAPA settings to json `/home/yingqi/repo/LLM-InTRRA/benchmark/self-attn/spatial_simple_stream/work.out/csynth/settings.json`.
+I1230 22:30:16.974 tapa.steps.common:46] reusing TAPA settings from upstream flows.
+I1230 22:30:17.036 tapa.core:182] extracting HLS C++ files
+I1230 22:30:17.069 tapa.core:214] running HLS
+I1230 22:30:17.079 tapa.core:260] spawn 10 workers for parallel HLS synthesis of the tasks

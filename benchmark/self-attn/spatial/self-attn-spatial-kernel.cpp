@@ -199,7 +199,7 @@ void projection(
     hls::vector<bool, N/VEC_LEN> output_write;
 
     for (int k = 0; k < D; k++) {
-#pragma HLS LOOP_TRIPCOUNT min=N max=N
+#pragma HLS LOOP_TRIPCOUNT min=D max=D
 #pragma HLS PIPELINE II=1
         input_read = false;
         weight_read = false;
