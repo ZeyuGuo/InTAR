@@ -76,4 +76,4 @@ run_spatial_hw:
 	./$(SPATIAL_EXECUTABLE) --bitstream bitstreams/self_attn_spatial_$(PLATFORM)_hw.xclbin
 
 clean:
-	rm -rf self-attn self-attn-intrra work.out/ build/
+	rm -rf self-attn self-attn-spatial work.out/ build/

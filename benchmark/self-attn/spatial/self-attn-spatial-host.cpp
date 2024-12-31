@@ -12,11 +12,10 @@ FIXME: This host is from intrra host.
 #include <gflags/gflags.h>
 #include <ap_int.h>
 
-#define VEC_LEN 16
+#define VEC_LEN 32
 constexpr int N = 256;
 constexpr int D = 1024;
-constexpr int D_head = 128;
-
+constexpr int D_head = 1024;
 constexpr int D_head_div_2 = D_head / 2;
 constexpr int weight_size_cc0 = D * D_head / 16;
 constexpr int weight_size_cc1 = D * D_head / 8;
@@ -42,7 +41,14 @@ DEFINE_string(bitstream, "", "path to bitstream file");
 
 int main(int argc, char *argv[]){
     gflags::ParseCommandLineFlags(&argc, &argv, true);
+    // google::InitGoogleLogging(argv[0]);
 
+    // FLAGS_log_dir = "./csim_logs";  // Specify the directory for log files
+    
+    // // Optional configurations:
+    // FLAGS_logtostderr = false;      // Don't log to stderr
+    // FLAGS_alsologtostderr = false; 
+    
     const int L = argc > 1 ? atoll(argv[1]) : N;
 
     srand((unsigned)time(nullptr));
