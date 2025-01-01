@@ -87,7 +87,7 @@ build_spatial: $(SPATIAL_KERNEL_SRCS)
 		--enable-hbm-binding-adjustment \
 		--enable-synth-util \
 		--run-floorplan-dse \
-		--max-parallel-synth-jobs 16 \
+		--max-parallel-synth-jobs 8 \
 		--floorplan-output build/solver.tcl \
 		$^
 # Don't know if the following are needed
