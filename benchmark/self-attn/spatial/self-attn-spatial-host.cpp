@@ -54,13 +54,42 @@ int main(int argc, char *argv[]){
     srand((unsigned)time(nullptr));
 
     // Example input and weight matrices
-    
+    LOG(INFO) << "Initializing input matrix...";
     aligned_vector<type_t> input(N * D);
-    aligned_vector<type_t> WQ(D * D_head);
-    aligned_vector<type_t> WK(D * D_head);
-    aligned_vector<type_t> WV(D * D_head);
-    aligned_vector<type_t> output(N * D_head);
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < D; ++j) {
+            input[i * D + j] = type_t(1);
+        }
+    } 
+    LOG(INFO) << "Input matrix initialized with all 1s";
 
+    type_t WQ_primitive[D][D];
+    type_t WK_primitive[D][D];
+    type_t WV_primitive[D][D];
+    for (int i = 0; i < D; i++){
+        for (int j = 0; j < D; j++){
+            WQ_primitive[i][j] = type_t(1);
+            WK_primitive[i][j] = type_t(1);
+            WV_primitive[i][j] = type_t(1);
+        }
+    }
+    LOG(INFO) << "Weight matrices initialized with all 1s";
+    aligned_vector<type_t> WQ(D * D);
+    aligned_vector<type_t> WK(D * D);
+    aligned_vector<type_t> WV(D * D);
+
+    // transpose WQ_primitive, WK_primitive, WV_primitive
+    for (int i = 0; i < D; i++){
+        for (int j = 0; j < D; j++){
+            WQ[j * D + i] = WQ_primitive[i][j];
+            WK[j * D + i] = WK_primitive[i][j];
+            WV[j * D + i] = WV_primitive[i][j];
+        }
+    }
+    LOG(INFO) << "Weight matrices transposed";
+
+
+    aligned_vector<type_t> output(N * D_head);
     aligned_vector<int> cycle_count(1);
 
     int64_t kernel_time_ns = tapa::invoke(selfAttention, FLAGS_bitstream,

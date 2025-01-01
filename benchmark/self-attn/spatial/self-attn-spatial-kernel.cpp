@@ -226,6 +226,7 @@ void projection(
         }
 
     }
+    // LOG(INFO) << "Projection done";
 }
 
 /**
@@ -305,6 +306,7 @@ void compute_S(
         }
         // LOG(INFO) << "Written " << compute_S_name << " row: " << i << " out of " << N-1;
     }
+    // LOG(INFO) << "Compute S done";
 }
 
 
@@ -372,6 +374,7 @@ void compute_output(
         }
         // LOG(INFO) << "Written " << "Output" << " column: " << j << " out of " << D-1;
     }
+    // LOG(INFO) << "Compute Output done";
 }
 
 // Helper function to apply softmax row-wise on a matrix

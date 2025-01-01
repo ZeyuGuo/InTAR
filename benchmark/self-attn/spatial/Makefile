@@ -9,6 +9,7 @@ SPATIAL_EXECUTABLE := build/self-attn-spatial
 CPU_SRCS := self-attn.cpp
 SPATIAL_HOST_SRCS := self-attn-spatial-host.cpp
 SPATIAL_KERNEL_SRCS := self-attn-spatial-kernel.cpp
+BASELINE_SRCS := $(SPATIAL_KERNEL_SRCS) $(SPATIAL_HOST_SRCS)
 
 DUMMY := $(shell mkdir -p build)
 
