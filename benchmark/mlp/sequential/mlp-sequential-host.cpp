@@ -24,6 +24,7 @@ void MLP(
     tapa::mmap<int16_v16> W1,
     tapa::mmap<int16_v16> W2,
     tapa::mmap<int16_v16> W3,
+    tapa::mmap<int16_v16> offchip,
     tapa::mmap<int16_v16> data_out,
     tapa::mmap<int> cycle_count
 );
@@ -46,6 +47,7 @@ int main(int argc, char *argv[]){
     aligned_vector<ap_int<16>> W1(weight_size1*16);
     aligned_vector<ap_int<16>> W2(weight_size2*16);
     aligned_vector<ap_int<16>> W3(weight_size3*16);
+    aligned_vector<ap_int<16>> offchip(hidden_size2);
     aligned_vector<ap_int<16>> data_out(output_size);
     aligned_vector<int> cycle_count(1);
 
@@ -54,6 +56,7 @@ int main(int argc, char *argv[]){
         tapa::read_only_mmap<ap_int<16>>(W1).reinterpret<int16_v16>(),
         tapa::read_only_mmap<ap_int<16>>(W2).reinterpret<int16_v16>(),
         tapa::read_only_mmap<ap_int<16>>(W3).reinterpret<int16_v16>(),
+        tapa::read_write_mmap<ap_int<16>>(offchip).reinterpret<int16_v16>(),
         tapa::write_only_mmap<ap_int<16>>(data_out).reinterpret<int16_v16>(),
         tapa::write_only_mmap<int>(cycle_count));
 
