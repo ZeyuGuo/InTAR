@@ -44,7 +44,7 @@ build_spatial_hw_emu:
 	sed -i '3s/.*/TARGET=hw_emu/' generate-bitstream.sh; \
 	bash generate-bitstream.sh
 	mkdir -p bitstreams/; \
-	cp work.out/run-1/vitis_run_hw_emu/selfAttention_$(PLATFORM).xclbin bitstreams/self_attn_spatial_$(PLATFORM)_hw_emu.xclbin
+	cp work.out/run-1/vitis_run_hw_emu/selfAttention_$(PLATFORM).xclbin bitstreams/gating_net_spatial_$(PLATFORM)_hw_emu.xclbin
 
 .PHONY: build_spatial_hw
 build_spatial_hw:
@@ -53,7 +53,7 @@ build_spatial_hw:
 	sed -i '3s/.*/# TARGET=hw_emu/' generate-bitstream.sh; \
 	bash generate-bitstream.sh
 	mkdir -p bitstreams/; \
-	cp work.out/run-1/vitis_run_hw/selfAttention_$(PLATFORM).xclbin bitstreams/self_attn_spatial_$(PLATFORM)_hw.xclbin
+	cp work.out/run-1/vitis_run_hw/selfAttention_$(PLATFORM).xclbin bitstreams/gating_net_spatial_$(PLATFORM)_hw.xclbin
 
 
 gating-net: gating-net.cpp
@@ -71,10 +71,10 @@ run_spatial: $(SPATIAL_EXECUTABLE)
 	./$(SPATIAL_EXECUTABLE)
 
 run_spatial_hw_emu:
-	./$(SPATIAL_EXECUTABLE) --bitstream bitstreams/self_attn_spatial_$(PLATFORM)_hw_emu.xclbin
+	./$(SPATIAL_EXECUTABLE) --bitstream bitstreams/gating_net_spatial_$(PLATFORM)_hw_emu.xclbin
 
 run_spatial_hw:
-	./$(SPATIAL_EXECUTABLE) --bitstream bitstreams/self_attn_spatial_$(PLATFORM)_hw.xclbin
+	./$(SPATIAL_EXECUTABLE) --bitstream bitstreams/gating_net_spatial_$(PLATFORM)_hw.xclbin
 
 clean:
 	rm -rf gating-net gating-net-spatial work.out/ build/
