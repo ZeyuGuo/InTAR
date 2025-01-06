@@ -87,6 +87,7 @@ void top(
 
                 layer_inner_16: for (int jj = 0; jj < 16; jj++) {
                     #pragma HLS latency max=2
+                    #pragma HLS unroll factor=4
                     int16_v16 op2;
 
                     if (layer == 0) {
