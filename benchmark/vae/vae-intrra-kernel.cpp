@@ -106,6 +106,8 @@ void write_mtx(
 } 
 
 
+// Rely on HLS resource binding for this kernel
+
 void CC0_Encoder_Decoder_Conv1(
     tapa::istream<int16_v16>& fifo_input,
     tapa::istream<int16_v16>& fifo_weight,
@@ -124,112 +126,128 @@ void CC0_Encoder_Decoder_Conv1(
     #pragma HLS array_partition variable=kernel2 complete dim=1
 
 
-    for(int c = 0; c < num_channel; c++){
-        for(int i = 0; i < (kernel_total_size1 >> 4); i++){
-            #pragma HLS pipeline II=1
-            int16_v16 tmp = fifo_weight.read();
-            for(int j = 0; j < 16; j++){
-                #pragma HLS unroll
-                kernel1[c][0][i*16+j] = tmp[j];
-            }
-        }
-    }
-
-    //encoder conv1
-
-    for(int c = 0; c < num_channel; c++){
-        ap_int<16> X[input_height][input_width];
-
-        #pragma HLS array_partition variable=X cyclic factor=8 dim=1
-        #pragma HLS array_partition variable=X cyclic factor=8 dim=2
-
-        for(int i = 0; i < (input_height >> 2); i++){
-            for(int j = 0; j < (input_width >> 2); j++){
-                #pragma HLS pipeline II=1
-
-                int16_v16 tmp = fifo_input.read();
-                for(int k = 0; k < 4; k++){
-                    #pragma HLS unroll
-                    for(int kk = 0; kk < 4; kk++){
-                        #pragma HLS unroll
-                        X[i*4+k][j*4+kk] = tmp[k*4+kk];
-                    }
-                }
-            }
-        }
-
-        for (int i = 0; i < hidden1_size; i++) {
-            for (int j = 0; j < hidden1_size; j++) {
-                #pragma HLS pipeline II=1
-                ap_int<16> tmp = 0;
-                for (int ki = 0; ki < kernel_size1; ki++) {
-                    #pragma HLS unroll
-                    for (int kj = 0; kj < kernel_size1; kj++) {
-                        #pragma HLS unroll
-                        tmp += X[i + ki][j + kj] * kernel1[c][0][ki * kernel_size1 + kj];
-                    }
-                }
-                fifo_to_ctr_mem.write(tmp);
-            }
-        }
-    }
-
-    for(int c = 0; c < num_channel; c++){
-        for(int i = 0; i < (kernel_total_size2 >> 4); i++){
-            #pragma HLS pipeline II=1
-            int16_v16 tmp = fifo_weight.read();
-            for(int j = 0; j < 16; j++){
-                #pragma HLS unroll
-                kernel2[c][i*16+j] = tmp[j];
-            }
-        }
-    }
-
-    for (int i = 0; i < hidden2_size; i++) {
-        for (int j = 0; j < hidden2_size; j++) {
-            #pragma HLS pipeline II=1
-            ap_int<16> tmp = 0;
-            int16_v32 inp = fifo_from_ctr_mem.read();
+    for(int st = 0; st < 3; st++){
+        
+        if(st == 0){
             for(int c = 0; c < num_channel; c++){
-                for (int ki = 0; ki < kernel_size2; ki++) {
-                    for (int kj = 0; kj < kernel_size2; kj++) {
-                        tmp += inp[c*kernel_total_size2+ki*kernel_size2+kj] * kernel1[c][ki * kernel_size2 + kj];
+                for(int i = 0; i < (kernel_total_size1 >> 4); i++){
+                    #pragma HLS pipeline II=1
+                    int16_v16 tmp = fifo_weight.read();
+                    for(int j = 0; j < 16; j++){
+                        #pragma HLS unroll
+                        kernel1[c][0][i*16+j] = tmp[j];
                     }
                 }
             }
-            fifo_to_latent_sample.write(tmp);
-        }
-    }
-
-    //decoder conv transpose 1
-    for(int c = 0; c < num_channel; c++){
-        for(int f = 0; f < num_channel; f++){
-            for(int i = 0; i < (kernel_total_size1 >> 4); i++){
-                #pragma HLS pipeline II=1
-                int16_v16 tmp = fifo_weight.read();
-                for(int j = 0; j < 16; j++){
-                    #pragma HLS unroll
-                    kernel1[c][f][i*16+j] = tmp[j];
+        } else if (st == 1) {
+            for(int c = 0; c < num_channel; c++){
+                for(int i = 0; i < (kernel_total_size2 >> 4); i++){
+                    #pragma HLS pipeline II=1
+                    int16_v16 tmp = fifo_weight.read();
+                    for(int j = 0; j < 16; j++){
+                        #pragma HLS unroll
+                        kernel2[c][i*16+j] = tmp[j];
+                    }
+                }
+            }
+        } else {
+            //decoder conv transpose 1
+            for(int c = 0; c < num_channel; c++){
+                for(int f = 0; f < num_channel; f++){
+                    for(int i = 0; i < (kernel_total_size1 >> 4); i++){
+                        #pragma HLS pipeline II=1
+                        int16_v16 tmp = fifo_weight.read();
+                        for(int j = 0; j < 16; j++){
+                            #pragma HLS unroll
+                            kernel1[c][f][i*16+j] = tmp[j];
+                        }
+                    }
                 }
             }
         }
-    }
 
-    for(int rep = 0; rep < num_channel; rep++){
-        for(int f = 0; f < num_channel; f++){
-            for (int i = 0; i < hidden3_size; i++) {
-                for (int j = 0; j < hidden3_size; j++) {
-                    ap_int<16> tmp = 0;
-                    for(int c = 0; c < num_channel; c++){
-                        #pragma HLS pipeline II=1
-                        int16_v64 inp = fifo_from_latent_sample.read();
-                        for (int ki = 0; ki < kernel_size1; ki++) {
-                            for (int kj = 0; kj < kernel_size1; kj++) {
-                                tmp += inp[ki*kernel_size2+kj] * kernel1[c][f][ki * kernel_size1 + kj];
+        //encoder conv1
+        if(st == 0 || st == 2){
+            const int bound_rep = (st == 0) ? 1 : num_channel;
+            const int bound_ij = (st == 0) ? hidden1_size : hidden3_size;
+            const int bound_c = (st == 1) ? 1 : num_channel;
+
+            for(int rep = 0; rep < bound_rep; rep++){
+                for(int f = 0; f < num_channel; f++){
+                    ap_int<16> X[input_height][input_width];
+
+                    #pragma HLS array_partition variable=X cyclic factor=8 dim=1
+                    #pragma HLS array_partition variable=X cyclic factor=8 dim=2
+
+                    if(st == 0) {
+                        for(int i = 0; i < (input_height >> 2); i++){
+                            for(int j = 0; j < (input_width >> 2); j++){
+                                #pragma HLS pipeline II=1
+
+                                int16_v16 tmp = fifo_input.read();
+                                for(int k = 0; k < 4; k++){
+                                    #pragma HLS unroll
+                                    for(int kk = 0; kk < 4; kk++){
+                                        #pragma HLS unroll
+                                        X[i*4+k][j*4+kk] = tmp[k*4+kk];
+                                    }
+                                }
                             }
                         }
                     }
-                    fifo_to_CC1.write(tmp);
+
+                    for (int i = 0; i < bound_ij; i++) {
+                        for (int j = 0; j < bound_ij; j++) {
+                            ap_int<16> tmp = 0;
+                            for(int c = 0; c < bound_c; c++){
+                                #pragma HLS pipeline II=1
+                                int16_v64 inp; 
+                                if(st == 2) inp = fifo_from_latent_sample.read();
+                                int16_v64 op1; int16_v64 op2;
+                                for(int ki = 0; ki < kernel_size1; ki++){
+                                    #pragma HLS unroll
+                                    for(int kj = 0; kj < kernel_size1; kj++){
+                                        #pragma HLS unroll
+                                        if(st == 0){
+                                            op1[ki*kernel_size1+kj] = X[i + ki][j + kj];
+                                            op2[ki * kernel_size1 + kj] = kernel1[f][0][ki * kernel_size1 + kj];
+                                        } else {
+                                            op1[ki*kernel_size1+kj] = inp[ki*kernel_size1+kj];
+                                            op2[ki * kernel_size1 + kj] = kernel1[c][f][ki * kernel_size1 + kj];
+                                        }
+                                    }
+                                }
+                                for (int ki = 0; ki < kernel_size1; ki++) {
+                                    #pragma HLS unroll
+                                    for (int kj = 0; kj < kernel_size1; kj++) {
+                                        #pragma HLS unroll
+                                        tmp += op1[ki*kernel_size1+kj] * op2[ki*kernel_size1+kj];
+                                    }
+                                }
+                            }
+                            if(st == 0) {
+                                fifo_to_ctr_mem.write(tmp);
+                            } else {
+                                fifo_to_CC1.write(tmp);
+                            }
+                        }
+                    }
+                }
+            }
+        } else if(st == 1) {
+            for (int i = 0; i < hidden2_size; i++) {
+                for (int j = 0; j < hidden2_size; j++) {
+                    #pragma HLS pipeline II=1
+                    ap_int<16> tmp = 0;
+                    int16_v32 inp = fifo_from_ctr_mem.read();
+                    for(int c = 0; c < num_channel; c++){
+                        for (int ki = 0; ki < kernel_size2; ki++) {
+                            for (int kj = 0; kj < kernel_size2; kj++) {
+                                tmp += inp[c*kernel_total_size2+ki*kernel_size2+kj] * kernel2[c][ki * kernel_size2 + kj];
+                            }
+                        }
+                    }
+                    fifo_to_latent_sample.write(tmp);
                 }
             }
         }
@@ -400,77 +418,93 @@ void CC1_Encoder_Decoder_Conv2(
         }
     }
 
-    for(int c = 0; c < num_channel; c++){
-        for(int i = 0; i < (kernel_total_size2 >> 4); i++){
-            #pragma HLS pipeline II=1
-            int16_v16 tmp = fifo_weight.read();
-            for(int j = 0; j < 16; j++){
-                #pragma HLS unroll
-                kernel2[c][1][i*16+j] = tmp[j];
-            }
-        }
-    }
+    for(int st = 0; st < 2; st++){
 
-    for (int i = 0; i < hidden2_size; i++) {
-        for (int j = 0; j < hidden2_size; j++) {
-            #pragma HLS pipeline II=1
-            ap_int<16> tmp = 0;
-            int16_v32 inp = fifo_from_ctr_mem.read();
+        if(st == 0){
             for(int c = 0; c < num_channel; c++){
-                for (int ki = 0; ki < kernel_size2; ki++) {
-                    for (int kj = 0; kj < kernel_size2; kj++) {
-                        tmp += inp[c*kernel_total_size2+ki*kernel_size2+kj] * kernel1[c][1][ki * kernel_size2 + kj];
+                for(int i = 0; i < (kernel_total_size2 >> 4); i++){
+                    #pragma HLS pipeline II=1
+                    int16_v16 tmp = fifo_weight.read();
+                    for(int j = 0; j < 16; j++){
+                        #pragma HLS unroll
+                        kernel2[c][1][i*16+j] = tmp[j];
                     }
                 }
             }
-            fifo_to_latent_sample.write(tmp);
-        }
-    }
+        } else {
+            for(int c = 0; c < num_channel; c++){
+                for(int f = 0; f < num_channel; f++){
+                    for(int i = 0; i < (kernel_total_size2 >> 4); i++){
+                        #pragma HLS pipeline II=1
 
-    //decoder conv transpose 2
-    for(int c = 0; c < num_channel; c++){
-        for(int f = 0; f < num_channel; f++){
-            for(int i = 0; i < (kernel_total_size2 >> 4); i++){
-                #pragma HLS pipeline II=1
-
-                int16_v16 tmp = fifo_weight.read();
-                for(int j = 0; j < 16; j++){
-                    #pragma HLS unroll
-                    kernel2[c][f][i*16+j] = tmp[j];
-                }
-            }
-        }
-    }
-
-    for(int f = 0; f < num_channel; f++){
-        for(int c = 0; c < num_channel; c++){
-            
-            ap_int<16> hidden_cache[hidden3_size][hidden3_size];
-            #pragma HLS array_partition variable=hidden_cache cyclic factor=4 dim=1
-            #pragma HLS array_partition variable=hidden_cache cyclic factor=4 dim=2
-
-            for(int i = 0; i < hidden3_size; i++){
-                for(int j = 0; j < hidden3_size; j++){
-                    #pragma HLS pipeline II=1
-                    ap_int<16> tmp = fifo_from_CC0.read();
-                    hidden_cache[i][j] = tmp;
-                }
-            }
-
-            for (int i = 0; i < hidden4_size; i++) {
-                for (int j = 0; j < hidden4_size; j++) {
-                    #pragma HLS pipeline II=1
-                    ap_int<16> tmp = 0;
-                    for (int ki = 0; ki < kernel_size1; ki++) {
-                        for (int kj = 0; kj < kernel_size1; kj++) {
-                            int ii = i - ki;
-                            int jj = j - kj;
-                            if(ii >= 0 && ii < hidden3_size && jj >= 0 && jj < hidden3_size){
-                                tmp += hidden_cache[ii][jj] * kernel2[c][f][ki * kernel_size2 + kj];
-                            }
+                        int16_v16 tmp = fifo_weight.read();
+                        for(int j = 0; j < 16; j++){
+                            #pragma HLS unroll
+                            kernel2[c][f][i*16+j] = tmp[j];
                         }
                     }
-                    fifo_output.write(tmp);
+                }
+            }
+        }
+
+        const int f_bound = (st == 0) ? 1 : num_channel;
+        const int c_bound = (st == 0) ? 1 : num_channel;
+        const int inner_c = (st == 0) ? num_channel : 1;
+        const int bound_ij = (st == 0) ? hidden2_size : hidden4_size;
+
+        for(int f = 0; f < f_bound; f++){
+            for(int c = 0; c < c_bound; c++){
+                ap_int<16> hidden_cache[hidden3_size][hidden3_size];
+                #pragma HLS array_partition variable=hidden_cache cyclic factor=4 dim=1
+                #pragma HLS array_partition variable=hidden_cache cyclic factor=4 dim=2
+
+                if(st == 1){
+                    for(int i = 0; i < hidden3_size; i++){
+                        for(int j = 0; j < hidden3_size; j++){
+                            #pragma HLS pipeline II=1
+                            ap_int<16> tmp = fifo_from_CC0.read();
+                            hidden_cache[i][j] = (tmp > 0) ? tmp : ap_int<16>(0);
+                        }
+                    }
+                }
+
+                for (int i = 0; i < bound_ij; i++) {
+                    for (int j = 0; j < bound_ij; j++) {
+                        ap_int<16> tmp = 0;
+                        int16_v32 inp;
+                        if(st == 0) inp = fifo_from_ctr_mem.read();
+                        for(int c_in = 0; c_in < inner_c; c_in++){
+                            #pragma HLS pipeline II=1
+                            int16_v16 op1; int16_v16 op2;
+                            for (int ki = 0; ki < kernel_size2; ki++) {
+                                for (int kj = 0; kj < kernel_size2; kj++) {
+                                    const int ii = i - ki;
+                                    const int jj = j - kj;
+                                    if(st == 0){
+                                        op1[ki * kernel_size2 + kj] = inp[c_in*kernel_total_size2+ki*kernel_size2+kj];
+                                        op2[ki * kernel_size2 + kj] = kernel2[c_in][1][ki * kernel_size2 + kj];
+                                    } else if(ii >= 0 && ii < hidden3_size && jj >= 0 && jj < hidden3_size){
+                                        op1[ki * kernel_size2 + kj] = hidden_cache[ii][jj];
+                                        op2[ki * kernel_size2 + kj] = kernel2[c][f][ki * kernel_size2 + kj];
+                                    } else {
+                                        op1[ki * kernel_size2 + kj] = 0;
+                                        op2[ki * kernel_size2 + kj] = 0;
+                                    }
+                                }
+                            }
+
+                            for (int ki = 0; ki < kernel_size2; ki++) {
+                                for (int kj = 0; kj < kernel_size2; kj++) {
+                                    tmp += op1[ki * kernel_size2 + kj] * op2[ki * kernel_size2 + kj];
+                                }
+                            }
+                        }
+                        if (st == 0) {
+                            fifo_to_latent_sample.write(tmp);
+                        } else {
+                            fifo_output.write(tmp);
+                        }
+                    }
                 }
             }
         }
