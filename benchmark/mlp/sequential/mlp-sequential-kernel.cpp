@@ -89,41 +89,30 @@ void top(
                 layer_inner_16: for (int jj = 0; jj < 8; jj++) {
                     int16_v16 op2[2];
 
-                    // Load 2x16 weights (32)
+                    // load 2x16 weights (32)
                     for (int jjj = 0; jjj < 2; jjj++) {
                         #pragma HLS pipeline II=1
 
-                        // Fix addr
+                        // fix addr
                         int addr = i*bound_j + jj*2 + jjj;
 
                         if (layer == 0) {
-                            if (!W1.read_addr.full()) {
-                                W1.read_addr.write(addr);
-                            }
-                            if (!W1.read_data.empty()) {
-                                op2[jjj] = W1.read_data.read(nullptr);
-                            }
+                            W1.read_addr.write(addr);
+                            op2[jjj] = W1.read_data.read(nullptr);
                         } else if (layer == 1) {
-                            if (!W2.read_addr.full()) {
-                                W2.read_addr.write(addr);
-                            }
-                            if (!W2.read_data.empty()) {
-                                op2[jjj] = W2.read_data.read(nullptr);
-                            }
+                            W2.read_addr.write(addr);
+                            op2[jjj] = W2.read_data.read(nullptr);
                         } else if (layer == 2) {
-                            if (!W3.read_addr.full()) {
-                                W3.read_addr.write(addr);
-                            }
-                            if (!W3.read_data.empty()) {
-                                op2[jjj] = W3.read_data.read(nullptr);
-                            }
+                            W3.read_addr.write(addr);
+                            op2[jjj] = W3.read_data.read(nullptr);
                         }
                     }
 
-                    // Compute 32 MACs (32 DSPs)
-                    layer_compute: for (int k = 0; k < 2; k++) {
+                    // compute 32 macs (32 dsps)
+                    layer_compute_outer: for (int k = 0; k < 2; k++) {
                         #pragma HLS unroll
-                        for (int kk = 0; kk < 16; kk++) {
+                        layer_compute_inner: for (int kk = 0; kk < 16; kk++) {
+                            #pragma HLS unroll
                             sum[jj*2+k] += op1[kk] * op2[k][kk];
                         }
                     }
