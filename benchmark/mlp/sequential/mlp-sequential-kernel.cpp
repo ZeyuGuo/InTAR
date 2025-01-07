@@ -66,58 +66,65 @@ void top(
         int bound_j = (layer == 0) ? (input_size >> 4) : (hidden_size1 >> 4);
         bound_j = (layer == 2) ? (hidden_size2 >> 4) : bound_j;
 
+        // Bound is output layer size div 16
         layer_outer: for (int i = 0; i < bound_i; i++) {
             int16_v16 sum;
+            // Bound is input layer size div 16
             layer_inner: for (int j = 0; j < bound_j; j++) {
                 int16_v16 op1;
 
-
-                // Read from offchip for layer 3
+                // Read X from offchip for layer 3
                 if (layer == 2) {
                     if (!offchip.read_addr.full()) {
-                        offchip.read_addr.write(i);
+                        offchip.read_addr.write(j);
                     }
                     if (!offchip.read_data.empty()) {
                         op1 = offchip.read_data.read(nullptr);
                     }
-                // Use onchip for layer1/layer2
+                // Use onchip X for layer1/layer2
                 } else {
                     op1 = (layer == 0) ? X[j] : scratchpad[j];
                 }
 
-                layer_inner_16: for (int jj = 0; jj < 16; jj++) {
-                    #pragma HLS latency max=2
-                    #pragma HLS unroll factor=4
-                    int16_v16 op2;
+                layer_inner_16: for (int jj = 0; jj < 8; jj++) {
+                    int16_v16 op2[2];
 
-                    if (layer == 0) {
-                        if (!W1.read_addr.full()) {
-                            W1.read_addr.write(i*bound_j + j);
-                        }
-                        if (!W1.read_data.empty()) {
-                            op2 = W1.read_data.read(nullptr);
-                        }
-                    } else if (layer == 1) {
-                        if (!W2.read_addr.full()) {
-                            W2.read_addr.write(i*bound_j + j);
-                        }
-                        if (!W2.read_data.empty()) {
-                            op2 = W2.read_data.read(nullptr);
-                        }
-                    } else if (layer == 2) {
-                        if (!W3.read_addr.full()) {
-                            W3.read_addr.write(i*bound_j + j);
-                        }
-                        if (!W3.read_data.empty()) {
-                            op2 = W3.read_data.read(nullptr);
+                    // Load 2x16 weights (32)
+                    for (int jjj = 0; jjj < 2; jjj++) {
+                        #pragma HLS pipeline II=1
+
+                        // Fix addr
+                        int addr = i*bound_j + jj*2 + jjj;
+
+                        if (layer == 0) {
+                            if (!W1.read_addr.full()) {
+                                W1.read_addr.write(addr);
+                            }
+                            if (!W1.read_data.empty()) {
+                                op2[jjj] = W1.read_data.read(nullptr);
+                            }
+                        } else if (layer == 1) {
+                            if (!W2.read_addr.full()) {
+                                W2.read_addr.write(addr);
+                            }
+                            if (!W2.read_data.empty()) {
+                                op2[jjj] = W2.read_data.read(nullptr);
+                            }
+                        } else if (layer == 2) {
+                            if (!W3.read_addr.full()) {
+                                W3.read_addr.write(addr);
+                            }
+                            if (!W3.read_data.empty()) {
+                                op2[jjj] = W3.read_data.read(nullptr);
+                            }
                         }
                     }
 
+                    // Compute 32 MACs (32 DSPs)
                     layer_compute: for (int k = 0; k < 2; k++) {
-                        #pragma HLS pipeline II=1
-                        for (int kk = 0; kk < 8; kk++) {
-                            #pragma HLS unroll
-                            sum[k*8 + kk] = op1[jj] * op2[k*8 + kk];
+                        #pragma HLS unroll
+                        for (int kk = 0; kk < 16; kk++) {
+                            sum[jj*2+k] += op1[kk] * op2[k][kk];
                         }
                     }
                 }
