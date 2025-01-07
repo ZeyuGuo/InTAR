@@ -33,7 +33,7 @@ build_sequential: $(SEQUENTIAL_KERNEL_SRCS)
 		--enable-hbm-binding-adjustment \
 		--enable-synth-util \
 		--run-floorplan-dse \
-		--max-parallel-synth-jobs 8 \
+		--max-parallel-synth-jobs 16 \
 		--floorplan-output build/solver.tcl \
 		$^
 
@@ -62,6 +62,8 @@ gating-net: gating-net.cpp
 gating-net-sequential: gating-net-sequential-kernel.cpp gating-net-sequential-host.cpp
 	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
+run-gating-net-sequential: gating-net-sequential
+	./gating-net-sequential
 
 # Run the designs
 run_cpu: $(CPU_EXECUTABLE)

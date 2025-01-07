@@ -8,8 +8,8 @@
 #include <gflags/gflags.h>
 #include <ap_int.h>
 
-#define VEC_LEN 8
-constexpr int B = 8;  // Batch size
+#define VEC_LEN 32
+constexpr int B = 32;  // Batch size
 constexpr int ID = 4096; // Input dimension
 constexpr int HD = 11008; // Hidden dimension
 

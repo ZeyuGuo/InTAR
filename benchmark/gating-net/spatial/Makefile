@@ -33,7 +33,7 @@ build_spatial: $(SPATIAL_KERNEL_SRCS)
 		--enable-hbm-binding-adjustment \
 		--enable-synth-util \
 		--run-floorplan-dse \
-		--max-parallel-synth-jobs 8 \
+		--max-parallel-synth-jobs 16 \
 		--floorplan-output build/solver.tcl \
 		$^
 
@@ -56,12 +56,14 @@ build_spatial_hw:
 	cp work.out/run-1/vitis_run_hw/selfAttention_$(PLATFORM).xclbin bitstreams/gating_net_spatial_$(PLATFORM)_hw.xclbin
 
 
-gating-net: gating-net.cpp
-	$(GCC) -o $@ -O2 $^ -lm
+gating-net: gating-net-spatial-host.cpp gating-net-spatial-kernel.cpp
+	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
 gating-net-spatial: gating-net-spatial-kernel.cpp gating-net-spatial-host.cpp
 	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
+run-gating-net: gating-net-spatial
+	./gating-net-spatial
 
 # Run the designs
 run_cpu: $(CPU_EXECUTABLE)
