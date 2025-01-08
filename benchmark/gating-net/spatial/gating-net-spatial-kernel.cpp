@@ -17,7 +17,7 @@ using namespace std;
 constexpr int ID = 4096;  // Input Dimension
 constexpr int HD = 11008;  // Hidden Dimension
 constexpr int B = 32;  // Batch Size
-constexpr int VEC_LEN = 32;
+constexpr int VEC_LEN = 16;
 constexpr int ID_div_VEC_LEN = ID / VEC_LEN;
 constexpr int HD_div_VEC_LEN = HD / VEC_LEN;
 constexpr int B_div_VEC_LEN = B / VEC_LEN;
@@ -148,7 +148,7 @@ void up_projection(
     vec_t tmp_out;
 
     // readin and cache the input matrix
-    for(int i = 0; i < B; i++){
+    up_cache_input: for(int i = 0; i < B; i++){
         for(int j = 0; j < ID_div_VEC_LEN;){
             if(!input_in_fifo.empty()){
                 vec_t tmp_vec; input_in_fifo.try_read(tmp_vec);
@@ -161,12 +161,11 @@ void up_projection(
     // LOG(INFO) << "Cached input in up_projection";
 
     // compute the result
-    for (int j = 0; j < HD; j++) {
+    up_matmul_col_iter: for (int j = 0; j < HD; j++) {
 #pragma HLS LOOP_TRIPCOUNT min=HD max=HD
-// pragma HLS PIPELINE II=1
 
         // readin a column of weight
-        for (int i = 0; i < HD_div_VEC_LEN;){
+        up_readin_col: for (int i = 0; i < HD_div_VEC_LEN;){
             if(!weight_in_fifo.empty()){
                 vec_t tmp_vec; weight_in_fifo.try_read(tmp_vec);
                 weight_col[i] = tmp_vec;
@@ -174,15 +173,14 @@ void up_projection(
             }
         }
 
-        for (int i = 0; i < B_div_VEC_LEN; i++){
-            for (int ii = 0; ii < VEC_LEN; ii++){
-
+        up_matmul_row_tile_iter: for (int i = 0; i < B_div_VEC_LEN; i++){
+            up_matmul_tile_row_iter:for (int ii = 0; ii < VEC_LEN; ii++){
                 type_t c = 0;
-                for(int k = 0; k < ID_div_VEC_LEN; k++){
+                up_matmul_k_iter:for(int k = 0; k < ID_div_VEC_LEN; k++){
 #pragma HLS pipeline II=1
-                    auto a = input[i*VEC_LEN+ii][k];  // row i segment k of input 
-                    auto b = weight_col[k];  // segment k of weight
-                    for (int l = 0; l < VEC_LEN; l++){
+                    vec_t a = input[i*VEC_LEN+ii][k];  // row i segment k of input 
+                    vec_t b = weight_col[k];  // segment k of weight
+                    up_matmul_l_iter: for (int l = 0; l < VEC_LEN; l++){
                         c += a[l] * b[l];
                     }
                 }
@@ -219,7 +217,7 @@ void gate_projection(
     vec_t up_tmp;
 
     // readin and cache the input matrix
-    for(int i = 0; i < B; i++){
+    gate_cache_input: for(int i = 0; i < B; i++){
         for(int j = 0; j < ID_div_VEC_LEN;){
             if(!input_in_fifo.empty()){
                 vec_t tmp_vec; input_in_fifo.try_read(tmp_vec);
@@ -232,31 +230,31 @@ void gate_projection(
     // LOG(INFO) << "Cached input in gate_projection";
 
     // compute the result
-    for (int j = 0; j < HD; j++) {
+    gate_matmul_col_iter: for (int j = 0; j < HD; j++) {
 #pragma HLS LOOP_TRIPCOUNT min=HD max=HD
 // pragma HLS PIPELINE II=1
 
         // readin a column of weight
-        for (int i = 0; i < ID_div_VEC_LEN;){
+        gate_readin_col: for (int i = 0; i < ID_div_VEC_LEN;){
             if(!weight_in_fifo.empty()){
                 weight_in_fifo.read(weight_col[i]);
                 i++;
             }
         }
 
-        for (int i = 0; i < B_div_VEC_LEN; i++){
+        gate_matmul_row_tile_iter: for (int i = 0; i < B_div_VEC_LEN; i++){
             if (!up_in_fifo.empty()){
                 up_in_fifo.read(up_tmp);
             }
 
-            for (int ii = 0; ii < VEC_LEN; ii++){
+            gate_matmul_tile_row_iter: for (int ii = 0; ii < VEC_LEN; ii++){
                 
                 type_t c = 0;
-                for(int k = 0; k < ID_div_VEC_LEN; k++){
+                gate_matmul_k_iter: for(int k = 0; k < ID_div_VEC_LEN; k++){
 #pragma HLS pipeline II=1
-                    auto a = input[i*VEC_LEN+ii][k];  // row i segment k of input 
-                    auto b = weight_col[k];  // segment k of weight
-                    for (int l = 0; l < VEC_LEN; l++){
+                    vec_t a = input[i*VEC_LEN+ii][k];  // row i segment k of input 
+                    vec_t b = weight_col[k];  // segment k of weight
+                    gate_matmul_l_iter: for (int l = 0; l < VEC_LEN; l++){
                         c += a[l] * b[l];
                     }
                 }
@@ -309,25 +307,24 @@ void down_projection(
 ) {
     vec_t combined_column[B_div_VEC_LEN];
     vec_t down_row[ID_div_VEC_LEN];
-    vec_t result[B][ID_div_VEC_LEN];
+    constexpr int result_size = B * ID / VEC_LEN;
+    vec_t result[result_size]; vec_t tmp_result;
     vec_t tmp_out;
 
     // initialize the result matrix
-    for (int i = 0; i < B; i++) {
-        for (int j = 0; j < ID_div_VEC_LEN; j++) {
-            for (int jj = 0; jj < VEC_LEN; jj++) {
-                result[i][j][jj] = 0;
-            }
+    down_init_result: for (int i = 0; i < B; i++) {
+        for (int j = 0; j < ID; j++) {
+            result[i][j] = 0;
         }
     }
 
-    for (int k = 0; k < HD; k++) {  // for column j in output
-// pragma HLS PIPELINE II=1
+    down_k_iter: for (int k = 0; k < HD; k++) {  // for column j in output
+#pragma HLS LOOP_TRIPCOUNT min=HD max=HD
 
         // readin a row of down projection weight
-        for (int i = 0; i < ID_div_VEC_LEN;){
+        down_readin_row: for (int i = 0; i < ID_div_VEC_LEN;){  // FIXME: Those two loop readin the fifo in several cycles, not possible to make the outer loop II=1. 
             if(!down_in_fifo.empty()){
-                down_in_fifo.try_read(down_row[i]);
+                down_in_fifo.read(down_row[i]);
                 i++;
             }
         }
@@ -335,7 +332,7 @@ void down_projection(
         // LOG(INFO) << "Read down projection weight row " << k << " in down_projection";
 
         // readin a column of combined result
-        for (int i = 0; i < B_div_VEC_LEN;){
+        down_readin_col: for (int i = 0; i < B_div_VEC_LEN;){
             if(!combined_in_fifo.empty()){
                 combined_in_fifo.read(combined_column[i]);
                 i++;
@@ -344,28 +341,43 @@ void down_projection(
 
         // LOG(INFO) << "Read combined result column " << k << " in down_projection";
 
-        for (int i = 0; i < B; i++){
-            for (int j = 0; j < ID_div_VEC_LEN; j++){
-#pragma HLS pipeline II=1
-                type_t c = 0;
-                for(int jj = 0; jj < VEC_LEN; jj++){
-                    result[i][j][jj] = result[i][j][jj] + combined_column[i / VEC_LEN][i % VEC_LEN] * down_row[j][jj];
+        down_tile_row_iter: for (int i = 0; i < B_div_VEC_LEN; i++){  // tile iteration at vertical direction
+            down_tile_col_iter: for (int j = 0; j < ID_div_VEC_LEN; j++){  // tile iteration at horizontal direction
+                vec_t local_row = down_row[j];
+                vec_t local_col = combined_column[i];
+                type_t local_col_partitioned[VEC_LEN];
+#pragma HLS ARRAY_PARTITION variable=local_col_partitioned complete dim=0
+                for (int k = 0; k < VEC_LEN; k++){
+#pragma HLS unroll
+                    local_col_partitioned[k] = local_col[k];
+                }
+
+                int tile_offset = (i * ID_div_VEC_LEN + j) * VEC_LEN;
+
+                down_tile_inner_row_iter: for (int ii = 0; ii < VEC_LEN; ii++){  // outer product form row wise
+#pragma HLS unroll
+                    vec_t result_row = result[tile_offset + ii];
+                    result_row = result_row + local_col_partitioned[ii] * local_row;
+//                     for (int jj = 0; jj < VEC_LEN; jj++){
+// #pragma HLS unroll
+//                         result_row[jj] = result_row[jj] + local_row[ii] * local_col[jj];
+//                     }   
+                    result[tile_offset + ii] = result_row;
                 }
             }
         }
 
-        // if (k % 100 == 0){
-        //     LOG(INFO) << "Computed result accumulation " << k << " in down_projection";
-        // }
     }
 
     // write the result to the output
     for (int i = 0; i < B; i++){
         for (int j = 0; j < ID_div_VEC_LEN; j++){
             if (!output_out_fifo.full()){
-                output_out_fifo.write(result[i][j]);
+                for (int jj = 0; jj < VEC_LEN; jj++){
+                    tmp_result[jj] = result[i][j * VEC_LEN + jj];
+                }
+                output_out_fifo.write(tmp_result);
             }
-            // LOG(INFO) << "Wrote output " << i * ID_div_VEC_LEN + j << " in down_projection";
         }
     }
 }

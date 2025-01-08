@@ -25,6 +25,7 @@ build_spatial: $(SPATIAL_KERNEL_SRCS)
 	rm -rf work.out/ build/
 	mkdir -p build
 	tapac \
+		-v 10 \
 		-o build/solver.$(PLATFORM).hw.xo \
 		--platform $(PLATFORM) \
 		--top $(TOP_NAME) \
@@ -44,7 +45,7 @@ build_spatial_hw_emu:
 	sed -i '3s/.*/TARGET=hw_emu/' generate-bitstream.sh; \
 	bash generate-bitstream.sh
 	mkdir -p bitstreams/; \
-	cp work.out/run-1/vitis_run_hw_emu/selfAttention_$(PLATFORM).xclbin bitstreams/gating_net_spatial_$(PLATFORM)_hw_emu.xclbin
+	cp work.out/run-1/vitis_run_hw_emu/gating_net_$(PLATFORM).xclbin bitstreams/gating_net_spatial_$(PLATFORM)_hw_emu.xclbin
 
 .PHONY: build_spatial_hw
 build_spatial_hw:
@@ -53,7 +54,7 @@ build_spatial_hw:
 	sed -i '3s/.*/# TARGET=hw_emu/' generate-bitstream.sh; \
 	bash generate-bitstream.sh
 	mkdir -p bitstreams/; \
-	cp work.out/run-1/vitis_run_hw/selfAttention_$(PLATFORM).xclbin bitstreams/gating_net_spatial_$(PLATFORM)_hw.xclbin
+	cp work.out/run-1/vitis_run_hw/gating_net_$(PLATFORM).xclbin bitstreams/gating_net_spatial_$(PLATFORM)_hw.xclbin
 
 
 gating-net: gating-net-spatial-host.cpp gating-net-spatial-kernel.cpp

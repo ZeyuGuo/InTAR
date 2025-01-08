@@ -16,7 +16,7 @@ constexpr int ID_div_VEC_LEN = ID / VEC_LEN;
 constexpr int HD_div_VEC_LEN = HD / VEC_LEN;
 constexpr int B_div_VEC_LEN = B / VEC_LEN;
 
-typedef ap_int<64> type_t;
+typedef ap_int<16> type_t;
 using vec_t = tapa::vec_t<type_t, VEC_LEN>;
 constexpr int input_size = B * ID / VEC_LEN;
 
@@ -70,12 +70,12 @@ void gating_net_top(
     vec_t tmp_out[B];
     vec_t tmp_vec;
 
-#pragma HLS bind_storage variable=input_cache type=ram_2p impl=bram
-#pragma HLS bind_storage variable=up_result type=ram_2p impl=bram
-#pragma HLS bind_storage variable=tmp_out type=ram_2p impl=bram
+// #pragma HLS bind_storage variable=input_cache type=ram_2p impl=bram
+// #pragma HLS bind_storage variable=up_result type=ram_2p impl=bram
+// #pragma HLS bind_storage variable=tmp_out type=ram_2p impl=bram
 
     // Read and cache input
-    read_input_up_loop: for(int i_req = 0, i_resp = 0; i_resp < input_size;) {
+    read_input: for(int i_req = 0, i_resp = 0; i_resp < input_size;) {
         #pragma HLS pipeline II=1 style=stp
         if((i_req < input_size) & !input.read_addr.full()) {
             input.read_addr.write(i_req);
@@ -91,9 +91,9 @@ void gating_net_top(
     // LOG(INFO) << "Read input done";
 
     // Compute up and product with gate
-    for (int j = 0; j < HD; j++) {
+    combined_projection: for (int j = 0; j < HD;) {
         // readin a column of W_up
-        for (int k_req = 0, k_resp = 0; k_resp < ID_div_VEC_LEN;) {
+        read_W_up: for (int k_req = 0, k_resp = 0; k_resp < ID_div_VEC_LEN;) {
             if (k_req < ID_div_VEC_LEN && !W_up.read_addr.full()) {
                 W_up.read_addr.write(j * ID_div_VEC_LEN + k_req);
                 k_req++;
@@ -105,7 +105,7 @@ void gating_net_top(
         }
 
         // readin a column of W_gate
-        for (int k_req = 0, k_resp = 0; k_resp < ID_div_VEC_LEN;) {
+        read_W_gate: for (int k_req = 0, k_resp = 0; k_resp < ID_div_VEC_LEN;) {
             if (k_req < ID_div_VEC_LEN && !W_gate.read_addr.full()) {
                 W_gate.read_addr.write(j * ID_div_VEC_LEN + k_req);
                 k_req++;
@@ -117,11 +117,13 @@ void gating_net_top(
         }
 
         // compute a column
-        for (int i = 0; i < B; i++) {
+        compute_combined: for (int i = 0; i < B; i++) {
             type_t acc = 0;
             type_t gate_acc = 0;
-            for (int k = 0; k < ID_div_VEC_LEN; k++) {
-#pragma HLS PIPELIN II=1 style=stp
+#pragma HLS bind_op variable=acc op=mul impl=dsp
+#pragma HLS bind_op variable=gate_acc op=mul impl=dsp
+            compute_combined_k: for (int k = 0; k < ID_div_VEC_LEN; k++) {
+#pragma HLS PIPELINE II=1 style=stp
                 vec_t input_seg = input_cache[i * (ID / VEC_LEN) + k];
                 for (int kk = 0; kk < VEC_LEN; kk++) {
                     acc += input_seg[kk] * col_W_up[k][kk];
@@ -132,7 +134,7 @@ void gating_net_top(
         }
 
         // write the column to combined
-        for (int i_req = 0, i_resp = 0; i_resp < B_div_VEC_LEN;) {
+        write_combined_col: for (int i_req = 0, i_resp = 0; i_resp < B_div_VEC_LEN;) {
             if (i_req < B_div_VEC_LEN && !combined.write_addr.full() && !combined.write_data.full()) {
                 combined.write_addr.write(j * B_div_VEC_LEN + i_req);
                 combined.write_data.try_write(up_result[i_req]);
@@ -142,27 +144,24 @@ void gating_net_top(
             auto resp = combined.write_resp.read(success);
             if(success) {
                 i_resp += unsigned(resp)+1;
-                if ((j * B_div_VEC_LEN + i_resp) % 100 == 0) {
-                    // LOG(INFO) << "Write combined " << "(" << j * B_div_VEC_LEN + i_resp << ")" << " in gating_net_top with value " << int(up_result[i_resp][VEC_LEN-1]);
-                }
             }
         }
+        j++;
     }
 
-
-    for (int i = 0; i < input_size; i++) {
+    clear_input_cache: for (int i = 0; i < input_size; i++) {
         for (int j = 0; j < VEC_LEN; j++) {
             input_cache[i][j] = 0;  // clear input cache
         }
     }
 
     // Down projection with outer product
-    for (int k = 0; k < HD; k++) {
+    down_projection: for (int k = 0; k < HD;) {
         vec_t tmp_row[ID_div_VEC_LEN];
         vec_t tmp_col[B_div_VEC_LEN];
 
         // readin a row of W_down
-        for (int j_req = 0, j_resp = 0; j_resp < ID_div_VEC_LEN;) {
+        read_W_down: for (int j_req = 0, j_resp = 0; j_resp < ID_div_VEC_LEN;) {
             if (j_req < ID_div_VEC_LEN && !W_down.read_addr.full()) {
                 W_down.read_addr.write(k * ID_div_VEC_LEN + j_req);
                 j_req++;
@@ -174,7 +173,7 @@ void gating_net_top(
         }
 
         // readin a column of combined
-        for (int i_req = 0, i_resp = 0; i_resp < B_div_VEC_LEN;) {
+        read_combined: for (int i_req = 0, i_resp = 0; i_resp < B_div_VEC_LEN;) {
             if (i_req < B_div_VEC_LEN && !combined.read_addr.full()) {
                 combined.read_addr.write(k * B_div_VEC_LEN + i_req);
                 i_req++;
@@ -186,20 +185,20 @@ void gating_net_top(
         }
 
         // compute
-        for (int i = 0; i < B; i++) {
+        compute_down: for (int i = 0; i < B; i++) {
             for (int j = 0; j < ID_div_VEC_LEN; j++) {
-#pragma HLS PIPELIN II=1 style=stp
+#pragma HLS PIPELINE II=1 style=stp
                 for (int jj = 0; jj < VEC_LEN; jj++) {
                     input_cache[i * ID_div_VEC_LEN + j][jj] = input_cache[i * ID_div_VEC_LEN + j][jj] + tmp_row[j][jj] * tmp_col[i / VEC_LEN][i % VEC_LEN];
                 }
             }
         }
-
+        k++;
         // LOG(INFO) << "Computed iteration " << k << " in down_projection with value " << double(input_cache[0][0]);
     }
 
     // Write output tile by tile
-    for (int i_req = 0, i_resp = 0; i_resp < input_size;) {
+    write_output: for (int i_req = 0, i_resp = 0; i_resp < input_size;) {
         if (i_req < input_size && !output.write_addr.full() && !output.write_data.full()) {
             output.write_addr.write(i_req);
             output.write_data.try_write(input_cache[i_req]);
