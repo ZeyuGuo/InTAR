@@ -82,12 +82,12 @@ int main(int argc, char *argv[]) {
     std::cout << "Cycle count: " << cycle_count[0] << std::endl;
     std::cout << "Latency: " << kernel_time_ns * 1e-9 << " s" << std::endl;
 
-    for (int i = 0; i < B; i++) {
-        for (int j = 0; j < ID; j++) {
-            std::cout << output[i * ID + j] << " ";
-        }
-        std::cout << std::endl;
-    }
+    // for (int i = 0; i < B; i++) {
+    //     for (int j = 0; j < ID; j++) {
+    //         std::cout << output[i * ID + j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
 
     return 0;
 }
