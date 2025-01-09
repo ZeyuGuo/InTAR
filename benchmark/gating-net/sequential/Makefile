@@ -42,6 +42,7 @@ build_sequential_hw_emu:
 	cd work.out/run-1/;\
 	sed -i '2s/.*/# TARGET=hw/' generate-bitstream.sh; \
 	sed -i '3s/.*/TARGET=hw_emu/' generate-bitstream.sh; \
+	sed -i '4s/.*/DEBUG=-g/' generate-bitstream.sh; \
 	bash generate-bitstream.sh
 	mkdir -p bitstreams/; \
 	cp work.out/run-1/vitis_run_hw_emu/gating_net_$(PLATFORM).xclbin bitstreams/gating_net_sequential_$(PLATFORM)_hw_emu.xclbin

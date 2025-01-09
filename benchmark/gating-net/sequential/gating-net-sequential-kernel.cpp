@@ -130,7 +130,7 @@ void gating_net_top(
                     gate_acc += input_seg[kk] * col_W_gate[k][kk];
                 }
             }
-            up_result[i] = acc / (1 + hls::exp(-acc)) * gate_acc;
+            up_result[i / VEC_LEN][i % VEC_LEN] = acc * gate_acc;
         }
 
         // write the column to combined
