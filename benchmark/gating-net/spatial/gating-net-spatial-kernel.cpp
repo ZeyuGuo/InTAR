@@ -14,25 +14,35 @@ using namespace std;
 
 #define MEASURE_CYCLE_COUNT 1
 
-constexpr int ID = 4096;  // Input Dimension
-constexpr int HD = 11008;  // Hidden Dimension
+
+constexpr int ID = 512;  // Input Dimension
+constexpr int HD = 1376;  // Hidden Dimension
 constexpr int B = 32;  // Batch Size
 constexpr int VEC_LEN = 32;
 constexpr int ID_div_VEC_LEN = ID / VEC_LEN;
 constexpr int HD_div_VEC_LEN = HD / VEC_LEN;
 constexpr int B_div_VEC_LEN = B / VEC_LEN;
-typedef ap_int<16> type_t;
+typedef ap_int<64> type_t;
 typedef tapa::vec_t<type_t, VEC_LEN> vec_t;  // SIMD vector to use for the computation
+constexpr int result_size = B * ID / VEC_LEN;
+const int write_bound = B * ID / VEC_LEN;
 
-void measure_cycle(tapa::istream<bool>& fifo_fin, tapa::mmap<int> cycle_count){
+void measure_cycle(tapa::istreams<bool, MEASURE_CYCLE_COUNT>& fifo_fin, tapa::mmap<int> cycle_count){
     measure_cycle_loop: for (int cycle = 0;;cycle++){
-        if(!fifo_fin.empty()){
-            fifo_fin.read(nullptr);
+        bool flag_cont = false;
+        for(int i = 0; i < MEASURE_CYCLE_COUNT; i++){
+            flag_cont |= fifo_fin[i].empty();
+        }
+        if(!flag_cont){
+            measure_cycle_loop_count: for (int i = 0; i < MEASURE_CYCLE_COUNT; i++){
+                fifo_fin[i].read(nullptr);
+            }
             cycle_count[0] = cycle;
             break;
         }
     }
 }
+
 
 /**
  * @brief Read the weight matrix column by column
@@ -100,23 +110,47 @@ void write_output(
     tapa::istream<vec_t>& fifo_in,
     tapa::ostream<bool>& fifo_fin
 ){
-    const int write_bound = B * ID / VEC_LEN;
-    for(int i_req = 0, i_resp = 0; i_resp < write_bound;){
-        #pragma HLS pipeline II=1 style=stp
-        if((i_req < write_bound) & !fifo_in.empty() & !output_mtx.write_addr.full() & !output_mtx.write_data.full()){
-            output_mtx.write_addr.try_write(i_req);
-            vec_t tmp; fifo_in.try_read(tmp);
-            output_mtx.write_data.try_write(tmp);
-            ++i_req;
+    vec_t tmp[VEC_LEN];
+
+    for (int b = 0; b < B * ID_div_VEC_LEN / VEC_LEN; b++){
+        for (int i = 0; i < VEC_LEN;){
+            if(!fifo_in.empty()){
+                bool success = fifo_in.try_read(tmp[i]);
+                if(success){
+                    i++;
+                }
+            }
         }
-        bool success = false;
-        auto resp = output_mtx.write_resp.read(success);
-        if(success){
-            i_resp += unsigned(resp)+1;
+
+        for(int i_req = 0, i_resp = 0; i_resp < VEC_LEN;){
+
+#pragma HLS pipeline II=1 style=stp
+            if((i_req < VEC_LEN) & !output_mtx.write_addr.full() & !output_mtx.write_data.full()){
+                int tile_row = b / ID_div_VEC_LEN;
+                int tile_col = b % ID_div_VEC_LEN;
+                int result_row = tile_row * VEC_LEN + i_req;  // or i_req?
+                int result_col = tile_col;
+                output_mtx.write_addr.try_write(result_row * ID_div_VEC_LEN + result_col);
+                // printf("Request write output to addr %d\n", result_row * ID_div_VEC_LEN + result_col);
+                output_mtx.write_data.try_write(tmp[i_req]);
+                ++i_req;
+            }
+            bool write_success = false;
+            auto resp = output_mtx.write_resp.read(write_success);
+            if(write_success){
+                i_resp += unsigned(resp)+1;
+            } 
         }
+
+
     }
+    
+
+
+    // printf("Complete write output\n");
 
     fifo_fin.write(true);
+    // printf("Write finish signal\n");
 } 
 
 
@@ -134,20 +168,20 @@ void write_output(
 void up_projection(
     tapa::istream<vec_t>& input_in_fifo, 
     tapa::istream<vec_t>& weight_in_fifo,
-    tapa::ostream<vec_t>& output_out_fifo
+    tapa::ostream<vec_t>& up_out_fifo
 ) {
     vec_t input[B][ID_div_VEC_LEN];
     vec_t weight_col[ID_div_VEC_LEN];
-    vec_t tmp_input;
-    vec_t tmp_out;
 
     // readin and cache the input matrix
     up_cache_input: for(int i = 0; i < B; i++){
         for(int j = 0; j < ID_div_VEC_LEN;){
             if(!input_in_fifo.empty()){
-                vec_t tmp_vec; input_in_fifo.try_read(tmp_vec);
-                input[i][j] = tmp_vec;
-                j++;
+                vec_t tmp_vec; bool success = input_in_fifo.try_read(tmp_vec);
+                if(success){
+                    input[i][j] = tmp_vec;
+                    j++;
+                }
             }
         }
     }
@@ -157,13 +191,17 @@ void up_projection(
     // compute the result
     up_matmul_col_iter: for (int j = 0; j < HD; j++) {
 #pragma HLS LOOP_TRIPCOUNT min=HD max=HD
+        vec_t tmp_out[B_div_VEC_LEN];
 
         // readin a column of weight
-        up_readin_col: for (int i = 0; i < HD_div_VEC_LEN;){
+        up_readin_col: for (int i = 0; i < ID_div_VEC_LEN;){
             if(!weight_in_fifo.empty()){
-                vec_t tmp_vec; weight_in_fifo.try_read(tmp_vec);
-                weight_col[i] = tmp_vec;
-                i++;
+                vec_t tmp_vec; bool success = weight_in_fifo.try_read(tmp_vec);
+                if(success){
+                    weight_col[i] = tmp_vec;
+                    // printf("Read up projection weight %d\n", j * ID_div_VEC_LEN + i);
+                    i++;
+                }
             }
         }
 
@@ -178,12 +216,21 @@ void up_projection(
                         c += a[l] * b[l];
                     }
                 }
-                tmp_out[ii] = c;
-            }
+                tmp_out[i][ii] = c;
 
-            output_out_fifo.write(tmp_out);  // write the segment to the next task
-            // LOG(INFO) << "Wrote output " << j * HD_div_VEC_LEN + i << " in up_projection";
+                // printf("C value %lf\n", (double) c);
+
+                // exit(0);
+            }
         }
+
+        for (int i = 0; i < B_div_VEC_LEN; i++){
+            vec_t tmp_out_tmp = tmp_out[i];
+            up_out_fifo.write(tmp_out_tmp);
+            // printf("Wrote up projection result %d\n", j * B_div_VEC_LEN + i);
+        }
+
+        // printf("Wrote up projection column %d\n", j);
     }
 }
 
@@ -214,9 +261,11 @@ void gate_projection(
     gate_cache_input: for(int i = 0; i < B; i++){
         for(int j = 0; j < ID_div_VEC_LEN;){
             if(!input_in_fifo.empty()){
-                vec_t tmp_vec; input_in_fifo.try_read(tmp_vec);
-                input[i][j] = tmp_vec;
-                j++;
+                vec_t tmp_vec; bool success = input_in_fifo.try_read(tmp_vec);
+                if(success){
+                    input[i][j] = tmp_vec;
+                    j++;
+                }
             }
         }
     }
@@ -231,17 +280,22 @@ void gate_projection(
         // readin a column of weight
         gate_readin_col: for (int i = 0; i < ID_div_VEC_LEN;){
             if(!weight_in_fifo.empty()){
-                weight_in_fifo.try_read(weight_col_tmp);
-                weight_col[i] = weight_col_tmp;
-                i++;
+                bool success = weight_in_fifo.try_read(weight_col_tmp);
+                if(success){
+                    weight_col[i] = weight_col_tmp;
+                    i++;
+                }
             }
         }
 
         gate_readin_up: for (int i = 0; i < B_div_VEC_LEN;){
             if (!up_in_fifo.empty()){
-                up_in_fifo.try_read(up_tmp_tmp);
-                up_tmp[i] = up_tmp_tmp;
-                i++;
+                bool success = up_in_fifo.try_read(up_tmp_tmp);
+                if(success){
+                    up_tmp[i] = up_tmp_tmp;
+                    // printf("In gate read up projection result %d\n", j * B_div_VEC_LEN + i);
+                    i++;
+                }
             }
         }
 
@@ -263,14 +317,10 @@ void gate_projection(
             // LOG(INFO) << "Wrote output " << j * HD_div_VEC_LEN + i << " in gate_projection";
         }
 
-        gate_write_out: for (int i = 0; i < B_div_VEC_LEN;){
-            if (!output_out_fifo.full()){
-                tmp_out_tmp = tmp_out[i];
-                bool success = output_out_fifo.try_write(tmp_out_tmp);
-                if(success){
-                    i++;
-                }
-            }
+        gate_write_out: for (int i = 0; i < B_div_VEC_LEN; i++){
+            vec_t tmp_out_tmp = tmp_out[i];
+            output_out_fifo.write(tmp_out_tmp);
+            // printf("Wrote gate projection result %d value %d and %f\n", j * B_div_VEC_LEN + i, tmp_out_tmp[0], tmp_out_tmp[VEC_LEN-1]);
         }
     }
 }
@@ -290,15 +340,18 @@ void down_projection(
 ) {
     vec_t combined_column[B_div_VEC_LEN]; vec_t combined_column_tmp;
     vec_t down_row[ID_div_VEC_LEN]; vec_t down_row_tmp;
-    constexpr int result_size = B * ID / VEC_LEN;
     vec_t result[result_size]; vec_t tmp_result;
 
     // initialize the result matrix
     down_init_result: for (int i = 0; i < B; i++) {
-        for (int j = 0; j < ID; j++) {
-            result[i][j] = 0;
+        for (int j = 0; j < ID_div_VEC_LEN; j++) {
+            for (int k = 0; k < VEC_LEN; k++) {
+                result[i * ID_div_VEC_LEN + j][k] = 0;
+            }
         }
     }
+
+    // printf("Initialized down projection result\n");
 
     down_k_iter: for (int k = 0; k < HD; k++) {  // for column j in output
 #pragma HLS LOOP_TRIPCOUNT min=HD max=HD
@@ -306,22 +359,30 @@ void down_projection(
         // readin a row of down projection weight
         down_readin_row: for (int i = 0; i < ID_div_VEC_LEN;){  // FIXME: Those two loop readin the fifo in several cycles, not possible to make the outer loop II=1. 
             if(!down_in_fifo.empty()){
-                down_in_fifo.try_read(down_row_tmp);
-                down_row[i] = down_row_tmp;
-                i++;
+                bool success = down_in_fifo.try_read(down_row_tmp);
+                if(success){
+                    down_row[i] = down_row_tmp;
+                    i++;
+                }
             }
         }
+
+        // printf("Read down projection weight row %d\n", k);
 
         // LOG(INFO) << "Read down projection weight row " << k << " in down_projection";
 
         // readin a column of combined result
         down_readin_col: for (int i = 0; i < B_div_VEC_LEN;){
             if(!combined_in_fifo.empty()){
-                combined_in_fifo.try_read(combined_column_tmp);
-                combined_column[i] = combined_column_tmp;
-                i++;
+                bool success = combined_in_fifo.try_read(combined_column_tmp);
+                if(success){
+                    combined_column[i] = combined_column_tmp;
+                    i++;
+                }
             }
         }
+
+        // printf("Read combined result column %d\n", k);
 
         // LOG(INFO) << "Read combined result column " << k << " in down_projection";
 
@@ -346,24 +407,18 @@ void down_projection(
 // #pragma HLS unroll
 //                         result_row[jj] = result_row[jj] + local_row[ii] * local_col[jj];
 //                     }   
-                    result[tile_offset + ii * ID_div_VEC_LEN] = result_row;
+                    result[tile_offset + ii] = result_row;
                 }
             }
         }
 
+        // printf("Complete Down Projection Iteration %d\n", k);
     }
 
     // write the result to the output
     for (int i = 0; i < result_size; i++){
-        if (!output_out_fifo.full()){
-            for (int jj = 0; jj < VEC_LEN; jj++){
-                tmp_result[jj] = result[i][jj];
-            }
-            bool success = output_out_fifo.try_write(tmp_result);
-            if(success){
-                i++;
-            }
-        }
+        output_out_fifo.write(result[i]);
+        // printf("Wrote down projection result %d\n", i);
     }
 }
 
@@ -380,13 +435,19 @@ void silu(
     tapa::ostream<vec_t>& output_out_fifo
 ) {
     constexpr int silu_bound = B * HD / VEC_LEN;
-    for (int i = 0; i < silu_bound; i++){
-        vec_t tmp_input; input_in_fifo.read(tmp_input);
-        for (int j = 0; j < VEC_LEN; j++){
-            tmp_input[j] = tmp_input[j] / (1 + hls::exp(-tmp_input[j]));
+    for (int i = 0; i < silu_bound;){
+        if (!input_in_fifo.empty()){
+            vec_t tmp_input; bool success = input_in_fifo.try_read(tmp_input);
+            if(success){
+                vec_t tmp_output;
+                for (int j = 0; j < VEC_LEN; j++){
+                    // tmp_output[j] = tmp_input[j] / (1 + hls::exp(-tmp_input[j]));
+                    tmp_output[j] = tmp_input[j];
+                }
+                output_out_fifo.write(tmp_output);
+                i++;
+            }
         }
-
-        output_out_fifo.write(tmp_input);
     }
 }
 
@@ -403,18 +464,18 @@ void gating_net(
 
     tapa::stream<vec_t> fifo_input_up("fifo_input_up");
     tapa::stream<vec_t> fifo_input_gate("fifo_input_gate");
-    tapa::stream<vec_t> fifo_W_up("fifo_W_up");
+    tapa::stream<vec_t> fifo_W_up("fifo_W_up");  // 512
     tapa::stream<vec_t> fifo_W_gate("fifo_W_gate");
     tapa::stream<vec_t> fifo_W_down("fifo_W_down");
 
-    tapa::stream<vec_t> fifo_up("fifo_up");
-    tapa::stream<vec_t> fifo_up_silu("fifo_up_silu");
+    tapa::stream<vec_t> fifo_up("fifo_up");  // 512
+    tapa::stream<vec_t> fifo_up_silu("fifo_up_silu");  // 512
 
     tapa::stream<vec_t> fifo_gate("fifo_gate");
     
     tapa::stream<vec_t> fifo_output("fifo_output");
 
-    tapa::stream<bool> fifo_fin("fifo_fin");
+    tapa::streams<bool, MEASURE_CYCLE_COUNT> fifo_fin("fifo_fin");
 
     // Step 1: Compute Query, Key, and Value matrices
     tapa::task()

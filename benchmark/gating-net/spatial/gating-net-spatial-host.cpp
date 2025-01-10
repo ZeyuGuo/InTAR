@@ -8,12 +8,12 @@
 #include <gflags/gflags.h>
 #include <ap_int.h>
 
-#define VEC_LEN 32
+constexpr int VEC_LEN = 32;
 constexpr int B = 32;  // Batch size
-constexpr int ID = 4096; // Input dimension
-constexpr int HD = 11008; // Hidden dimension
+constexpr int ID = 512; // Input dimension
+constexpr int HD = 1376; // Hidden dimension
 
-using type_t = ap_int<16>;
+using type_t = ap_int<64>;
 using vec_t = tapa::vec_t<type_t, VEC_LEN>;
 
 void gating_net(
@@ -79,6 +79,12 @@ int main(int argc, char *argv[]) {
         tapa::read_only_mmap<type_t>(W_down).reinterpret<vec_t>(),
         tapa::write_only_mmap<type_t>(output).reinterpret<vec_t>(),
         tapa::write_only_mmap<int>(cycle_count));
+
+    for (int i = 0; i < B; i++){
+        for (int j = 0; j < ID; j++){
+            printf("Output %d, %d: %lf\n", i, j, (double) output[i * ID + j]);
+        }
+    }
 
     std::cout << "Cycle count: " << cycle_count[0] << std::endl;
     std::cout << "Latency: " << kernel_time_ns * 1e-9 << " s" << std::endl;

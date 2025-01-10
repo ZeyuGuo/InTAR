@@ -70,13 +70,8 @@ void gating_net_top(
     vec_t tmp_out[B];
     vec_t tmp_vec;
 
-// #pragma HLS bind_storage variable=input_cache type=ram_2p impl=bram
-// #pragma HLS bind_storage variable=up_result type=ram_2p impl=bram
-// #pragma HLS bind_storage variable=tmp_out type=ram_2p impl=bram
-
     // Read and cache input
     read_input: for(int i_req = 0, i_resp = 0; i_resp < input_size;) {
-        #pragma HLS pipeline II=1 style=stp
         if((i_req < input_size) & !input.read_addr.full()) {
             input.read_addr.write(i_req);
             i_req++;
