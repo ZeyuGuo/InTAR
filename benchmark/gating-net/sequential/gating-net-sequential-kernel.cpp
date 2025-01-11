@@ -69,7 +69,7 @@ void gating_net_top(
     vec_t tmp_out[B];
     vec_t tmp_vec;
 
-#pragma HLS ARRAY_PARTITION variable=input_cache type=block factor=VEC_LEN dim=1
+#pragma HLS ARRAY_PARTITION variable=input_cache type=cyclic factor=VEC_LEN dim=1
 
     // Read and cache input
     read_input: for(int i_req = 0, i_resp = 0; i_resp < input_size;) {
@@ -153,6 +153,8 @@ void gating_net_top(
         vec_t tmp_row[ID_div_VEC_LEN];
         vec_t tmp_col[B_div_VEC_LEN];
 
+#pragma HLS ARRAY_PARTITION variable=tmp_row type=cyclic factor=VEC_LEN dim=1
+
         // readin a row of W_down
         read_W_down: for (int j_req = 0, j_resp = 0; j_resp < ID_div_VEC_LEN;) {
             if (j_req < ID_div_VEC_LEN && !W_down.read_addr.full()) {
@@ -178,12 +180,16 @@ void gating_net_top(
         }
 
         // compute
-        compute_down_projection_tiles: for (int j = 0; j < ID_div_VEC_LEN; j++) {
-            for (int i = 0; i < B; i++) {
-#pragma HLS UNROLL factor=8  // could change it to 16
+        compute_down_projection_tiles: for (int i = 0; i < B; i++) {
+            type_t col_val = tmp_col[i / VEC_LEN][i % VEC_LEN];
+            for (int j = 0; j < ID_div_VEC_LEN; j++) {      
+#pragma HLS LOOP_TRIPCOUNT min=ID_div_VEC_LEN max=ID_div_VEC_LEN
+#pragma HLS UNROLL factor=16
                 vec_t tmp_vec = input_cache[i * ID_div_VEC_LEN + j];
+                vec_t local_tmp_row = tmp_row[j];
                 for (int jj = 0; jj < VEC_LEN; jj++) {
-                    tmp_vec[jj] = tmp_vec[jj] + tmp_row[j][jj] * tmp_col[i / VEC_LEN][i % VEC_LEN];
+#pragma HLS UNROLL
+                    tmp_vec[jj] = tmp_vec[jj] + local_tmp_row[jj] * col_val;
                 }
                 input_cache[i * ID_div_VEC_LEN + j] = tmp_vec;
             }

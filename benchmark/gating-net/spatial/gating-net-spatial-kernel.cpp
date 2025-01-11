@@ -110,47 +110,22 @@ void write_output(
     tapa::istream<vec_t>& fifo_in,
     tapa::ostream<bool>& fifo_fin
 ){
-    vec_t tmp[VEC_LEN];
-
-    for (int b = 0; b < B * ID_div_VEC_LEN / VEC_LEN; b++){
-        for (int i = 0; i < VEC_LEN;){
-            if(!fifo_in.empty()){
-                bool success = fifo_in.try_read(tmp[i]);
-                if(success){
-                    i++;
-                }
-            }
+    for(int i_req = 0, i_resp = 0; i_resp < result_size;){
+        #pragma HLS pipeline II=1 style=stp
+        if((i_req < result_size) & !fifo_in.empty() & !output_mtx.write_addr.full() & !output_mtx.write_data.full()){
+            output_mtx.write_addr.try_write(i_req);
+            vec_t tmp; fifo_in.try_read(tmp);
+            output_mtx.write_data.try_write(tmp);
+            ++i_req;
         }
-
-        for(int i_req = 0, i_resp = 0; i_resp < VEC_LEN;){
-
-#pragma HLS pipeline II=1 style=stp
-            if((i_req < VEC_LEN) & !output_mtx.write_addr.full() & !output_mtx.write_data.full()){
-                int tile_row = b / ID_div_VEC_LEN;
-                int tile_col = b % ID_div_VEC_LEN;
-                int result_row = tile_row * VEC_LEN + i_req;  // or i_req?
-                int result_col = tile_col;
-                output_mtx.write_addr.try_write(result_row * ID_div_VEC_LEN + result_col);
-                // printf("Request write output to addr %d\n", result_row * ID_div_VEC_LEN + result_col);
-                output_mtx.write_data.try_write(tmp[i_req]);
-                ++i_req;
-            }
-            bool write_success = false;
-            auto resp = output_mtx.write_resp.read(write_success);
-            if(write_success){
-                i_resp += unsigned(resp)+1;
-            } 
+        bool success = false;
+        auto resp = output_mtx.write_resp.read(success);
+        if(success){
+            i_resp += unsigned(resp)+1;
         }
-
-
     }
-    
-
-
-    // printf("Complete write output\n");
 
     fifo_fin.write(true);
-    // printf("Write finish signal\n");
 } 
 
 
@@ -173,6 +148,8 @@ void up_projection(
     vec_t input[B][ID_div_VEC_LEN];
     vec_t weight_col[ID_div_VEC_LEN];
 
+#pragma HLS ARRAY_PARTITION variable=input type=complete dim=1
+
     // readin and cache the input matrix
     up_cache_input: for(int i = 0; i < B; i++){
         for(int j = 0; j < ID_div_VEC_LEN;){
@@ -191,8 +168,8 @@ void up_projection(
     // compute the result
     up_matmul_col_iter: for (int j = 0; j < HD; j++) {
 #pragma HLS LOOP_TRIPCOUNT min=HD max=HD
-        vec_t tmp_out[B_div_VEC_LEN];
 
+        vec_t out;
         // readin a column of weight
         up_readin_col: for (int i = 0; i < ID_div_VEC_LEN;){
             if(!weight_in_fifo.empty()){
@@ -205,31 +182,35 @@ void up_projection(
             }
         }
 
-        up_matmul_row_tile_iter: for (int i = 0; i < B_div_VEC_LEN; i++){
-            up_matmul_tile_row_iter:for (int ii = 0; ii < VEC_LEN; ii++){
-                type_t c = 0;
-                up_matmul_k_iter:for(int k = 0; k < ID_div_VEC_LEN; k++){
+        type_t tmp_out[VEC_LEN]; 
+#pragma HLS ARRAY_PARTITION variable=tmp_out type=complete dim=1
+
+        up_matmul_tile_row_iter:for (int ii = 0; ii < VEC_LEN; ii++){
+#pragma HLS UNROLL factor=8
+
+            type_t c = 0;
+            up_matmul_k_iter:for(int k = 0; k < ID_div_VEC_LEN; k++){
 #pragma HLS pipeline II=1
-                    vec_t a = input[i*VEC_LEN+ii][k];  // row i segment k of input 
-                    vec_t b = weight_col[k];  // segment k of weight
-                    up_matmul_l_iter: for (int l = 0; l < VEC_LEN; l++){
-                        c += a[l] * b[l];
-                    }
+                vec_t a = input[ii][k];  // row i segment k of input 
+                vec_t b = weight_col[k];  // segment k of weight
+                up_matmul_l_iter: for (int l = 0; l < VEC_LEN; l++){
+                    c += a[l] * b[l];
                 }
-                tmp_out[i][ii] = c;
-
-                // printf("C value %lf\n", (double) c);
-
-                // exit(0);
             }
+            tmp_out[ii] = c;
+
+            // printf("C value %lf\n", (double) c);
+
+            // exit(0);
         }
 
-        for (int i = 0; i < B_div_VEC_LEN; i++){
-            vec_t tmp_out_tmp = tmp_out[i];
-            up_out_fifo.write(tmp_out_tmp);
-            // printf("Wrote up projection result %d\n", j * B_div_VEC_LEN + i);
+        for (int ii = 0; ii < VEC_LEN; ii++){
+#pragma HLS UNROLL
+            out[ii] = tmp_out[ii];
         }
 
+
+        up_out_fifo.write(out);
         // printf("Wrote up projection column %d\n", j);
     }
 }
@@ -254,8 +235,12 @@ void gate_projection(
     vec_t input[B][ID_div_VEC_LEN];
     vec_t weight_col[ID_div_VEC_LEN]; vec_t weight_col_tmp;
     vec_t tmp_input;
-    vec_t tmp_out[B_div_VEC_LEN]; vec_t tmp_out_tmp;
-    vec_t up_tmp[B_div_VEC_LEN]; vec_t up_tmp_tmp;
+    vec_t out; type_t tmp_out[VEC_LEN];
+    vec_t up; type_t up_tmp[VEC_LEN];
+
+#pragma HLS ARRAY_PARTITION variable=input type=complete dim=1
+#pragma HLS ARRAY_PARTITION variable=tmp_out type=complete dim=1
+#pragma HLS ARRAY_PARTITION variable=up_tmp type=complete dim=1
 
     // readin and cache the input matrix
     gate_cache_input: for(int i = 0; i < B; i++){
@@ -275,7 +260,6 @@ void gate_projection(
     // compute the result
     gate_matmul_col_iter: for (int j = 0; j < HD; j++) {
 #pragma HLS LOOP_TRIPCOUNT min=HD max=HD
-// pragma HLS PIPELINE II=1
 
         // readin a column of weight
         gate_readin_col: for (int i = 0; i < ID_div_VEC_LEN;){
@@ -290,38 +274,39 @@ void gate_projection(
 
         gate_readin_up: for (int i = 0; i < B_div_VEC_LEN;){
             if (!up_in_fifo.empty()){
-                bool success = up_in_fifo.try_read(up_tmp_tmp);
+                bool success = up_in_fifo.try_read(up);
                 if(success){
-                    up_tmp[i] = up_tmp_tmp;
-                    // printf("In gate read up projection result %d\n", j * B_div_VEC_LEN + i);
+                    for (int ii = 0; ii < VEC_LEN; ii++){
+#pragma HLS UNROLL
+                        up_tmp[ii] = up[ii];
+                    }
                     i++;
                 }
             }
         }
 
-        gate_matmul_row_tile_iter: for (int i = 0; i < B_div_VEC_LEN; i++){
-#pragma HLS LOOP_TRIPCOUNT min=B_div_VEC_LEN max=B_div_VEC_LEN
+        gate_matmul_tile_row_iter: for (int ii = 0; ii < VEC_LEN; ii++){
+#pragma HLS UNROLL factor=8
 
-            gate_matmul_tile_row_iter: for (int ii = 0; ii < VEC_LEN; ii++){
-                type_t c = 0;
-                gate_matmul_k_iter: for(int k = 0; k < ID_div_VEC_LEN; k++){
+            type_t c = 0;
+            gate_matmul_k_iter: for(int k = 0; k < ID_div_VEC_LEN; k++){
 #pragma HLS pipeline II=1
-                    vec_t a = input[i*VEC_LEN+ii][k];  // row i segment k of input 
-                    vec_t b = weight_col[k];  // segment k of weight
-                    gate_matmul_l_iter: for (int l = 0; l < VEC_LEN; l++){
-                        c += a[l] * b[l];
-                    }
+                vec_t a = input[ii][k];  // row i segment k of input 
+                vec_t b = weight_col[k];  // segment k of weight
+                gate_matmul_l_iter: for (int l = 0; l < VEC_LEN; l++){
+                    c += a[l] * b[l];
                 }
-                tmp_out[i][ii] = c * up_tmp[i][ii];
             }
-            // LOG(INFO) << "Wrote output " << j * HD_div_VEC_LEN + i << " in gate_projection";
+            tmp_out[ii] = c * up_tmp[ii];
+        }
+    
+        for (int ii = 0; ii < VEC_LEN; ii++){
+#pragma HLS UNROLL
+            out[ii] = tmp_out[ii];
         }
 
-        gate_write_out: for (int i = 0; i < B_div_VEC_LEN; i++){
-            vec_t tmp_out_tmp = tmp_out[i];
-            output_out_fifo.write(tmp_out_tmp);
-            // printf("Wrote gate projection result %d value %d and %f\n", j * B_div_VEC_LEN + i, tmp_out_tmp[0], tmp_out_tmp[VEC_LEN-1]);
-        }
+        output_out_fifo.write(out);
+
     }
 }
 
@@ -338,11 +323,12 @@ void down_projection(
     tapa::istream<vec_t>& down_in_fifo,
     tapa::ostream<vec_t>& output_out_fifo
 ) {
-    vec_t combined_column[B_div_VEC_LEN]; vec_t combined_column_tmp;
+    vec_t combined_column; vec_t combined_column_tmp;
     vec_t down_row[ID_div_VEC_LEN]; vec_t down_row_tmp;
     vec_t result[result_size]; vec_t tmp_result;
 
-#pragma HLS ARRAY_PARTITION variable=result type=cyclic factor=VEC_LEN dim=1
+#pragma HLS ARRAY_PARTITION variable=result type=cyclic factor=8 dim=1
+#pragma HLS ARRAY_PARTITION variable=combined_column type=complete dim=1
 
     // initialize the result matrix
     down_init_result: for (int i = 0; i < B; i++) {
@@ -376,7 +362,10 @@ void down_projection(
             if(!combined_in_fifo.empty()){
                 bool success = combined_in_fifo.try_read(combined_column_tmp);
                 if(success){
-                    combined_column[i] = combined_column_tmp;
+                    for (int ii = 0; ii < VEC_LEN; ii++){
+#pragma HLS UNROLL
+                        combined_column[ii] = combined_column_tmp[ii];
+                    }
                     i++;
                 }
             }
@@ -385,30 +374,14 @@ void down_projection(
         // printf("Read combined result column %d\n", k);
 
         // LOG(INFO) << "Read combined result column " << k << " in down_projection";
-
-        down_tile_row_iter: for (int i = 0; i < B_div_VEC_LEN; i++){  // tile iteration at vertical direction
+        down_tile_inner_row_iter: for (int ii = 0; ii < VEC_LEN; ii++){
+            type_t col_val = combined_column[ii];
             down_tile_col_iter: for (int j = 0; j < ID_div_VEC_LEN; j++){  // tile iteration at horizontal direction
+#pragma HLS unroll factor=8
                 vec_t local_row = down_row[j];
-                vec_t local_col = combined_column[i];
-                type_t local_col_partitioned[VEC_LEN];
-#pragma HLS ARRAY_PARTITION variable=local_col_partitioned complete dim=0
-                for (int k = 0; k < VEC_LEN; k++){
-#pragma HLS unroll
-                    local_col_partitioned[k] = local_col[k];
-                }
-
-                int tile_offset = (i * ID_div_VEC_LEN + j) * VEC_LEN;
-
-                down_tile_inner_row_iter: for (int ii = 0; ii < VEC_LEN; ii++){  // outer product form row wise
-#pragma HLS unroll
-                    vec_t result_row = result[tile_offset + ii];
-                    result_row = result_row + local_col_partitioned[ii] * local_row;
-//                     for (int jj = 0; jj < VEC_LEN; jj++){
-// #pragma HLS unroll
-//                         result_row[jj] = result_row[jj] + local_row[ii] * local_col[jj];
-//                     }   
-                    result[tile_offset + ii] = result_row;
-                }
+                vec_t result_row = result[ii * ID_div_VEC_LEN + j];
+                result_row = result_row + col_val * local_row[ii];
+                result[ii * ID_div_VEC_LEN + j] = result_row;
             }
         }
 
