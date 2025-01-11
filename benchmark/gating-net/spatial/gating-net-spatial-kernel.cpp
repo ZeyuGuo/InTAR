@@ -15,14 +15,14 @@ using namespace std;
 #define MEASURE_CYCLE_COUNT 1
 
 
-constexpr int ID = 512;  // Input Dimension
-constexpr int HD = 1376;  // Hidden Dimension
+constexpr int ID = 4096;  // Input Dimension
+constexpr int HD = 11008;  // Hidden Dimension
 constexpr int B = 32;  // Batch Size
 constexpr int VEC_LEN = 32;
 constexpr int ID_div_VEC_LEN = ID / VEC_LEN;
 constexpr int HD_div_VEC_LEN = HD / VEC_LEN;
 constexpr int B_div_VEC_LEN = B / VEC_LEN;
-typedef ap_int<64> type_t;
+typedef ap_int<16> type_t;
 typedef tapa::vec_t<type_t, VEC_LEN> vec_t;  // SIMD vector to use for the computation
 constexpr int result_size = B * ID / VEC_LEN;
 const int write_bound = B * ID / VEC_LEN;
@@ -342,12 +342,12 @@ void down_projection(
     vec_t down_row[ID_div_VEC_LEN]; vec_t down_row_tmp;
     vec_t result[result_size]; vec_t tmp_result;
 
+#pragma HLS ARRAY_PARTITION variable=result type=cyclic factor=VEC_LEN dim=1
+
     // initialize the result matrix
     down_init_result: for (int i = 0; i < B; i++) {
         for (int j = 0; j < ID_div_VEC_LEN; j++) {
-            for (int k = 0; k < VEC_LEN; k++) {
-                result[i * ID_div_VEC_LEN + j][k] = 0;
-            }
+            result[i * ID_div_VEC_LEN + j] = 0;
         }
     }
 
@@ -441,8 +441,8 @@ void silu(
             if(success){
                 vec_t tmp_output;
                 for (int j = 0; j < VEC_LEN; j++){
-                    // tmp_output[j] = tmp_input[j] / (1 + hls::exp(-tmp_input[j]));
-                    tmp_output[j] = tmp_input[j];
+                    tmp_output[j] = tmp_input[j] / (1 + (type_t) hls::exp(-tmp_input[j]));
+                    // tmp_output[j] = tmp_input[j];
                 }
                 output_out_fifo.write(tmp_output);
                 i++;

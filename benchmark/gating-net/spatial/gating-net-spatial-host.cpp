@@ -10,10 +10,10 @@
 
 constexpr int VEC_LEN = 32;
 constexpr int B = 32;  // Batch size
-constexpr int ID = 512; // Input dimension
-constexpr int HD = 1376; // Hidden dimension
+constexpr int ID = 4096; // Input dimension
+constexpr int HD = 11008; // Hidden dimension
 
-using type_t = ap_int<64>;
+using type_t = ap_int<16>;
 using vec_t = tapa::vec_t<type_t, VEC_LEN>;
 
 void gating_net(

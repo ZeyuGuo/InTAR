@@ -6,12 +6,11 @@
 
 using namespace std;
 
-#define B 32
-#define ID 4096
-#define HD 11008
-#define VEC_LEN 32
-#define SCALE_FACTOR 32
-
+const int B = 32;
+const int ID = 4096;
+const int HD = 11008;
+const int VEC_LEN = 32;
+const int SCALE_FACTOR = 32;
 constexpr int ID_div_VEC_LEN = ID / VEC_LEN;
 constexpr int HD_div_VEC_LEN = HD / VEC_LEN;
 constexpr int B_div_VEC_LEN = B / VEC_LEN;
@@ -70,6 +69,8 @@ void gating_net_top(
     vec_t tmp_out[B];
     vec_t tmp_vec;
 
+#pragma HLS ARRAY_PARTITION variable=input_cache type=block factor=VEC_LEN dim=1
+
     // Read and cache input
     read_input: for(int i_req = 0, i_resp = 0; i_resp < input_size;) {
         if((i_req < input_size) & !input.read_addr.full()) {
@@ -113,10 +114,9 @@ void gating_net_top(
 
         // compute a column
         compute_combined: for (int i = 0; i < B; i++) {
+#pragma HLS UNROLL factor=8
             type_t acc = 0;
             type_t gate_acc = 0;
-#pragma HLS bind_op variable=acc op=mul impl=dsp
-#pragma HLS bind_op variable=gate_acc op=mul impl=dsp
             compute_combined_k: for (int k = 0; k < ID_div_VEC_LEN; k++) {
 #pragma HLS PIPELINE II=1 style=stp
                 vec_t input_seg = input_cache[i * (ID / VEC_LEN) + k];
@@ -125,7 +125,7 @@ void gating_net_top(
                     gate_acc += input_seg[kk] * col_W_gate[k][kk];
                 }
             }
-            up_result[i / VEC_LEN][i % VEC_LEN] = acc * gate_acc;
+            up_result[i / VEC_LEN][i % VEC_LEN] = acc / (1 + (type_t) hls::exp(-acc)) * gate_acc;
         }
 
         // write the column to combined
@@ -145,9 +145,7 @@ void gating_net_top(
     }
 
     clear_input_cache: for (int i = 0; i < input_size; i++) {
-        for (int j = 0; j < VEC_LEN; j++) {
-            input_cache[i][j] = 0;  // clear input cache
-        }
+        input_cache[i] = 0;
     }
 
     // Down projection with outer product
@@ -180,12 +178,14 @@ void gating_net_top(
         }
 
         // compute
-        compute_down: for (int i = 0; i < B; i++) {
-            for (int j = 0; j < ID_div_VEC_LEN; j++) {
-#pragma HLS PIPELINE II=1 style=stp
+        compute_down_projection_tiles: for (int j = 0; j < ID_div_VEC_LEN; j++) {
+            for (int i = 0; i < B; i++) {
+#pragma HLS UNROLL factor=8  // could change it to 16
+                vec_t tmp_vec = input_cache[i * ID_div_VEC_LEN + j];
                 for (int jj = 0; jj < VEC_LEN; jj++) {
-                    input_cache[i * ID_div_VEC_LEN + j][jj] = input_cache[i * ID_div_VEC_LEN + j][jj] + tmp_row[j][jj] * tmp_col[i / VEC_LEN][i % VEC_LEN];
+                    tmp_vec[jj] = tmp_vec[jj] + tmp_row[j][jj] * tmp_col[i / VEC_LEN][i % VEC_LEN];
                 }
+                input_cache[i * ID_div_VEC_LEN + j] = tmp_vec;
             }
         }
         k++;
