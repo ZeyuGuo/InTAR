@@ -323,27 +323,24 @@ void down_projection(
     tapa::istream<vec_t>& down_in_fifo,
     tapa::ostream<vec_t>& output_out_fifo
 ) {
-    vec_t combined_column; vec_t combined_column_tmp;
+    type_t combined_column[VEC_LEN]; vec_t combined_column_tmp;
     vec_t down_row[ID_div_VEC_LEN]; vec_t down_row_tmp;
-    vec_t result[result_size]; vec_t tmp_result;
+    vec_t result[B][ID_div_VEC_LEN]; vec_t tmp_result;
 
-#pragma HLS ARRAY_PARTITION variable=result type=cyclic factor=8 dim=1
+#pragma HLS ARRAY_PARTITION variable=result type=complete dim=1
 #pragma HLS ARRAY_PARTITION variable=combined_column type=complete dim=1
 
     // initialize the result matrix
     down_init_result: for (int i = 0; i < B; i++) {
         for (int j = 0; j < ID_div_VEC_LEN; j++) {
-            result[i * ID_div_VEC_LEN + j] = 0;
+            result[i][j] = 0;
         }
     }
-
     // printf("Initialized down projection result\n");
-
-    down_k_iter: for (int k = 0; k < HD; k++) {  // for column j in output
+    down_k_iter: for (int k = 0; k < HD; k++) { // for column j in output
 #pragma HLS LOOP_TRIPCOUNT min=HD max=HD
-
         // readin a row of down projection weight
-        down_readin_row: for (int i = 0; i < ID_div_VEC_LEN;){  // FIXME: Those two loop readin the fifo in several cycles, not possible to make the outer loop II=1. 
+        down_readin_row: for (int i = 0; i < ID_div_VEC_LEN;){ // FIXME: Those two loop readin the fifo in several cycles, not possible to make the outer loop II=1. 
             if(!down_in_fifo.empty()){
                 bool success = down_in_fifo.try_read(down_row_tmp);
                 if(success){
@@ -352,11 +349,8 @@ void down_projection(
                 }
             }
         }
-
         // printf("Read down projection weight row %d\n", k);
-
         // LOG(INFO) << "Read down projection weight row " << k << " in down_projection";
-
         // readin a column of combined result
         down_readin_col: for (int i = 0; i < B_div_VEC_LEN;){
             if(!combined_in_fifo.empty()){
@@ -370,27 +364,29 @@ void down_projection(
                 }
             }
         }
-
         // printf("Read combined result column %d\n", k);
-
         // LOG(INFO) << "Read combined result column " << k << " in down_projection";
-        down_tile_inner_row_iter: for (int ii = 0; ii < VEC_LEN; ii++){
-            type_t col_val = combined_column[ii];
-            down_tile_col_iter: for (int j = 0; j < ID_div_VEC_LEN; j++){  // tile iteration at horizontal direction
+        down_tile_inner_row_iter: for (int i = 0; i < VEC_LEN; i++){
 #pragma HLS unroll factor=8
+            type_t col_val = combined_column[i];
+            down_tile_col_iter: for (int j = 0; j < ID_div_VEC_LEN; j++){ // tile iteration at horizontal direction
+#pragma HLS PIPELINE II=1
                 vec_t local_row = down_row[j];
-                vec_t result_row = result[ii * ID_div_VEC_LEN + j];
-                result_row = result_row + col_val * local_row[ii];
-                result[ii * ID_div_VEC_LEN + j] = result_row;
+                vec_t result_row = result[i][j];
+                for (int l = 0; l < VEC_LEN; l++){
+#pragma HLS UNROLL
+                    result_row[l] = result_row[l] + col_val * local_row[l];
+                }
+                result[i][j] = result_row;
             }
         }
-
         // printf("Complete Down Projection Iteration %d\n", k);
     }
-
     // write the result to the output
-    for (int i = 0; i < result_size; i++){
-        output_out_fifo.write(result[i]);
+    for (int i = 0; i < B; i++){
+        for (int j = 0; j < ID_div_VEC_LEN; j++){
+            output_out_fifo.write(result[i][j]);
+        }
         // printf("Wrote down projection result %d\n", i);
     }
 }

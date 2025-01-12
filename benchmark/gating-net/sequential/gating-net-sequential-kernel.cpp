@@ -62,14 +62,17 @@ void gating_net_top(
     tapa::async_mmap<vec_t>& output,
     tapa::ostream<bool>& fifo_fin
 ) {
-    vec_t input_cache[input_size];
+    vec_t input_cache[B][ID_div_VEC_LEN];
     vec_t col_W_up[ID_div_VEC_LEN];
     vec_t col_W_gate[ID_div_VEC_LEN];
-    vec_t up_result[B_div_VEC_LEN];
+    vec_t up_result; type_t up_result_tmp[B];
     vec_t tmp_out[B];
     vec_t tmp_vec;
 
-#pragma HLS ARRAY_PARTITION variable=input_cache type=cyclic factor=VEC_LEN dim=1
+#pragma HLS ARRAY_PARTITION variable=input_cache type=complete dim=1
+#pragma HLS ARRAY_PARTITION variable=up_result_tmp type=complete dim=1
+
+    // LOG(INFO) << "Start reading input";
 
     // Read and cache input
     read_input: for(int i_req = 0, i_resp = 0; i_resp < input_size;) {
@@ -79,12 +82,12 @@ void gating_net_top(
         }
         bool success = input.read_data.try_read(tmp_vec);
         if(success) {
-            input_cache[i_resp] = tmp_vec;
+            input_cache[i_resp / ID_div_VEC_LEN][i_resp % ID_div_VEC_LEN] = tmp_vec;
             i_resp++;
         }
     }
 
-    // LOG(INFO) << "Read input done";
+    // LOG(INFO) << "Start computing up and product with gate";
 
     // Compute up and product with gate
     combined_projection: for (int j = 0; j < HD;) {
@@ -100,6 +103,8 @@ void gating_net_top(
             }
         }
 
+        // LOG(INFO) << "Read W_up " << j << " done";
+
         // readin a column of W_gate
         read_W_gate: for (int k_req = 0, k_resp = 0; k_resp < ID_div_VEC_LEN;) {
             if (k_req < ID_div_VEC_LEN && !W_gate.read_addr.full()) {
@@ -112,6 +117,8 @@ void gating_net_top(
             }
         }
 
+        // LOG(INFO) << "Read W_gate " << j << " done";
+
         // compute a column
         compute_combined: for (int i = 0; i < B; i++) {
 #pragma HLS UNROLL factor=8
@@ -119,20 +126,28 @@ void gating_net_top(
             type_t gate_acc = 0;
             compute_combined_k: for (int k = 0; k < ID_div_VEC_LEN; k++) {
 #pragma HLS PIPELINE II=1 style=stp
-                vec_t input_seg = input_cache[i * (ID / VEC_LEN) + k];
+                vec_t input_seg = input_cache[i][k];
                 for (int kk = 0; kk < VEC_LEN; kk++) {
                     acc += input_seg[kk] * col_W_up[k][kk];
                     gate_acc += input_seg[kk] * col_W_gate[k][kk];
                 }
             }
-            up_result[i / VEC_LEN][i % VEC_LEN] = acc / (1 + (type_t) hls::exp(-acc)) * gate_acc;
+            // up_result_tmp[i] = acc / (1 + (type_t) hls::exp(-acc)) * gate_acc;
+            up_result_tmp[i] = acc * gate_acc;
+        }
+
+        // LOG(INFO) << "Computed combined " << j << " done";
+
+        for (int i = 0; i < B; i++) {
+#pragma HLS UNROLL
+            up_result[i] = up_result_tmp[i];
         }
 
         // write the column to combined
-        write_combined_col: for (int i_req = 0, i_resp = 0; i_resp < B_div_VEC_LEN;) {
+        write_combined_col: for (int i_req = 0, i_resp = 0; i_resp < 1;) {
             if (i_req < B_div_VEC_LEN && !combined.write_addr.full() && !combined.write_data.full()) {
-                combined.write_addr.write(j * B_div_VEC_LEN + i_req);
-                combined.write_data.try_write(up_result[i_req]);
+                combined.write_addr.write(j);
+                combined.write_data.try_write(up_result);
                 i_req++;
             }
             bool success = false;
@@ -141,19 +156,32 @@ void gating_net_top(
                 i_resp += unsigned(resp)+1;
             }
         }
+
+        // LOG(INFO) << "Write combined " << j << " done";
+
         j++;
     }
 
-    clear_input_cache: for (int i = 0; i < input_size; i++) {
-        input_cache[i] = 0;
+    // LOG(INFO) << "Computed combined";
+
+    clear_input_cache: for (int i = 0; i < B; i++) {
+        for (int j = 0; j < ID_div_VEC_LEN; j++) {
+            for (int k = 0; k < VEC_LEN; k++) {
+#pragma HLS UNROLL
+                input_cache[i][j][k] = 0;
+            }
+        }
     }
 
-    // Down projection with outer product
-    down_projection: for (int k = 0; k < HD;) {
-        vec_t tmp_row[ID_div_VEC_LEN];
-        vec_t tmp_col[B_div_VEC_LEN];
+    // LOG(INFO) << "Cleared input cache";
 
-#pragma HLS ARRAY_PARTITION variable=tmp_row type=cyclic factor=VEC_LEN dim=1
+    // Down projection with outer product
+    down_projection: for (int k = 0; k < HD; k++) {
+        vec_t tmp_row[ID_div_VEC_LEN];
+        vec_t tmp_col;
+        type_t tmp_vals[B];
+
+#pragma HLS ARRAY_PARTITION variable=tmp_vals type=complete dim=1
 
         // readin a row of W_down
         read_W_down: for (int j_req = 0, j_resp = 0; j_resp < ID_div_VEC_LEN;) {
@@ -170,46 +198,56 @@ void gating_net_top(
         // readin a column of combined
         read_combined: for (int i_req = 0, i_resp = 0; i_resp < B_div_VEC_LEN;) {
             if (i_req < B_div_VEC_LEN && !combined.read_addr.full()) {
-                combined.read_addr.write(k * B_div_VEC_LEN + i_req);
+                combined.read_addr.write(k);
                 i_req++;
             }
-            bool success = combined.read_data.try_read(tmp_col[i_resp]);
+            bool success = combined.read_data.try_read(tmp_col);
             if(success) {
+                for (int i = 0; i < B; i++) {
+#pragma HLS UNROLL
+                    tmp_vals[i] = tmp_col[i];
+                }
                 i_resp++;
             }
         }
 
         // compute
         compute_down_projection_tiles: for (int i = 0; i < B; i++) {
-            type_t col_val = tmp_col[i / VEC_LEN][i % VEC_LEN];
+#pragma HLS UNROLL factor=8
+            type_t col_val = tmp_vals[i];
             for (int j = 0; j < ID_div_VEC_LEN; j++) {      
 #pragma HLS LOOP_TRIPCOUNT min=ID_div_VEC_LEN max=ID_div_VEC_LEN
-#pragma HLS UNROLL factor=16
-                vec_t tmp_vec = input_cache[i * ID_div_VEC_LEN + j];
+#pragma HLS PIPELINE II=1 style=stp
+                vec_t tmp_vec = input_cache[i][j];
                 vec_t local_tmp_row = tmp_row[j];
                 for (int jj = 0; jj < VEC_LEN; jj++) {
 #pragma HLS UNROLL
                     tmp_vec[jj] = tmp_vec[jj] + local_tmp_row[jj] * col_val;
                 }
-                input_cache[i * ID_div_VEC_LEN + j] = tmp_vec;
+                input_cache[i][j] = tmp_vec;
             }
         }
-        k++;
         // LOG(INFO) << "Computed iteration " << k << " in down_projection with value " << double(input_cache[0][0]);
     }
 
+    // LOG(INFO) << "Computed down projection";
+
     // Write output tile by tile
-    write_output: for (int i_req = 0, i_resp = 0; i_resp < input_size;) {
-        if (i_req < input_size && !output.write_addr.full() && !output.write_data.full()) {
-            output.write_addr.write(i_req);
-            output.write_data.try_write(input_cache[i_req]);
-            i_req++;
-        }
-        bool success = false;
-        auto resp = output.write_resp.read(success);
-        if(success) {
-            i_resp += unsigned(resp)+1;
-            // LOG(INFO) << "Write output " << "(" << i_resp << ")" << " in gating_net_top with value " << double(input_cache[i_resp][0]);
+    write_output: for (int i = 0; i < B; i++) {
+        for (int j = 0; j < ID_div_VEC_LEN; j++) {
+            for (int i_req = 0, i_resp = 0; i_resp < ID_div_VEC_LEN;) {
+                if (i_req < ID_div_VEC_LEN && !output.write_addr.full() && !output.write_data.full()) {
+                    output.write_addr.write(i * ID_div_VEC_LEN + j);
+                    output.write_data.try_write(input_cache[i][j]);
+                    i_req++;
+                }
+                bool success = false;
+                auto resp = output.write_resp.read(success);
+                if(success) {
+                    i_resp += unsigned(resp)+1;
+                    // // LOG(INFO) << "Write output " << "(" << i_resp << ")" << " in gating_net_top with value " << double(input_cache[i_resp][0]);
+                }
+            }
         }
     }
 
