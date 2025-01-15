@@ -8,6 +8,8 @@ Latency: 209.027 s
 
 - Vitis HW
 ```
+Cycle count: 309498
+Latency: 0.00160654 s
 ```
 
 TAPA Estimation (from `work.out/run-1/run/autobridge-XXX-XX-XXXX-XX:XX.log`):
