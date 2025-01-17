@@ -65,7 +65,8 @@ gating-net-spatial: gating-net-spatial-kernel.cpp gating-net-spatial-host.cpp
 	$(GCC) -o $@ -O2 $^ -L/lib/x86_64-linux-gnu -L/usr/local/lib -ltapa -lfrt -lgflags -lglog -lm -lOpenCL -I$(XILINX_HLS)/include
 
 run-gating-net: gating-net-spatial
-	./gating-net-spatial
+	./gating-net-spatial 2> ~/scratch/spatial_csim.log
+	cp ~/scratch/spatial_csim.log .
 
 # Run the designs
 run_cpu: $(CPU_EXECUTABLE)
