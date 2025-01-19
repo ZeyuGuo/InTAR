@@ -121,13 +121,13 @@ void gating_net_top(
 
         // compute a column
         compute_combined: for (int i = 0; i < B; i++) {
-#pragma HLS UNROLL factor=8
             type_t acc = 0;
             type_t gate_acc = 0;
             compute_combined_k: for (int k = 0; k < ID_div_VEC_LEN; k++) {
 #pragma HLS PIPELINE II=1 style=stp
                 vec_t input_seg = input_cache[i][k];
                 for (int kk = 0; kk < VEC_LEN; kk++) {
+#pragma HLS UNROLL
                     acc += input_seg[kk] * col_W_up[k][kk];
                     gate_acc += input_seg[kk] * col_W_gate[k][kk];
                 }
@@ -157,7 +157,10 @@ void gating_net_top(
             }
         }
 
-        // LOG(INFO) << "Write combined " << j << " done";
+        // DEBUG PRINT
+        // if (j % 100 == 0) {
+        //     LOG(INFO) << "Write combined " << j << " done";
+        // }
 
         j++;
     }
@@ -213,7 +216,6 @@ void gating_net_top(
 
         // compute
         compute_down_projection_tiles: for (int i = 0; i < B; i++) {
-#pragma HLS UNROLL factor=8
             type_t col_val = tmp_vals[i];
             for (int j = 0; j < ID_div_VEC_LEN; j++) {      
 #pragma HLS LOOP_TRIPCOUNT min=ID_div_VEC_LEN max=ID_div_VEC_LEN
@@ -227,7 +229,11 @@ void gating_net_top(
                 input_cache[i][j] = tmp_vec;
             }
         }
-        // LOG(INFO) << "Computed iteration " << k << " in down_projection with value " << double(input_cache[0][0]);
+
+        // // DEBUG PRINT
+        // if (k % 100 == 0) {
+        //     LOG(INFO) << "Computed Down Projection iteration " << k;
+        // }
     }
 
     // LOG(INFO) << "Computed down projection";
