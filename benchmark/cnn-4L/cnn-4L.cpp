@@ -2,18 +2,18 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
-#include <stdint.h>
+#include <ctime>
 
 // Helper typedef for 2D matrix
-typedef std::vector<std::vector<int16_t>> Matrix;
+typedef std::vector<std::vector<float>> Matrix;
 
 constexpr int image_size = 224;
-constexpr int kernel_size = 3;
+constexpr int kernel_size = 4;
 
 // Function to print a matrix (for debugging)
 void printMatrix(const Matrix& mat) {
     for (const auto& row : mat) {
-        for (int16_t val : row) {
+        for (float val : row) {
             std::cout << val << " ";
         }
         std::cout << std::endl;
@@ -24,28 +24,27 @@ void printMatrix(const Matrix& mat) {
 void convolve(const Matrix& input, const Matrix& kernel, Matrix& output) {
     int inputSize = input.size();
     int kernelSize = kernel.size();
-    int outputSize = (input[0].size() - kernelSize) + 1 + 2;
+    int outputSize = (input[0].size() - kernelSize) + 1;
 
-    output.resize(outputSize, std::vector<int16_t>(outputSize, 0));
+    output.resize(outputSize, std::vector<float>(outputSize, 0));
 
     for (int i = 0; i < outputSize; ++i) {
         for (int j = 0; j < outputSize; ++j) {
             for (int m = 0; m < kernelSize; ++m) {
                 for (int n = 0; n < kernelSize; ++n) {
-                    if ((i + m) > 0 && (j + n) > 0 && (i + m) < outputSize && (j + n) < outputSize)
-                        output[i][j] += input[i + m - 1][j + n - 1] * kernel[m][n];
+                    output[i][j] += input[i + m][j + n] * kernel[m][n];
                 }
             }
         }
-
     }
 }
+
 // Apply ReLU activation
 void relu(const Matrix& input, Matrix& output) {
     output = input;
     for (auto& row : output) {
         for (auto& val : row) {
-            val = std::max(static_cast<short>(0), val);
+            val = std::max(0.0f, val);
         }
     }
 }
@@ -54,7 +53,7 @@ void relu(const Matrix& input, Matrix& output) {
 void upsample(const Matrix& input, Matrix& output) {
     int inputSize = input.size();
     int outputSize = inputSize * 2;
-    output.resize(outputSize, std::vector<int16_t>(outputSize, 0));
+    output.resize(outputSize, std::vector<float>(outputSize, 0));
 
     for (int i = 0; i < inputSize; ++i) {
         for (int j = 0; j < inputSize; ++j) {
@@ -70,11 +69,11 @@ void upsample(const Matrix& input, Matrix& output) {
 void maxPool(const Matrix& input, Matrix& output) {
     int inputSize = input.size();
     int outputSize = inputSize / 2;
-    output.resize(outputSize, std::vector<int16_t>(outputSize, 0));
+    output.resize(outputSize, std::vector<float>(outputSize, 0));
 
     for (int i = 0; i < outputSize; ++i) {
         for (int j = 0; j < outputSize; ++j) {
-            int16_t maxVal = 0;
+            float maxVal = 0;
             for (int m = 0; m < 2; ++m) {
                 for (int n = 0; n < 2; ++n) {
                     maxVal = std::max(maxVal, input[2 * i + m][2 * j + n]);
@@ -112,44 +111,30 @@ void CNN4L(const Matrix& input, const Matrix& weight1, const Matrix& weight2, co
     std::cout << output.size() * output[0].size() * 4 << std::endl;
 }
 
+void init_kernel(Matrix& kernel, int height, int width){
+    kernel.resize(height, std::vector<float>(width, 0));
+    for(int i = 0; i < height; i++){
+        for(int j = 0; j < width; j++){
+            kernel[i][j] = ((rand() % 100) / 100.0) - 0.5;
+        }
+    }
+}
+
 // Main function demonstrating the 4-layer CNN
 int main() {
     // Example input matrix (8x8)
     Matrix input;
-    input.assign(image_size, std::vector<int16_t>(image_size, 1));
+    input.assign(image_size, std::vector<float>(image_size, 0.3f));
 
-    // Example kernel (3x3)
-    Matrix kernel1 = {
-        {1, 1, -1},
-        {1, 2, -1},
-        {1, 3, -1}
-    };
-    Matrix kernel2 = {
-        {-1, 1, 4},
-        {1, 2, -1},
-        {-2, 3, -1}
-    };
-    Matrix kernel3 = {
-        {0, 1, -1},
-        {1, 2, 1},
-        {-1, 0, 1}
-    };
-    Matrix kernel4 = {
-        {1, 0, 1},
-        {-1, 1, 1},
-        {1, 0, -1}
-    };
+    Matrix kernel1, kernel2, kernel3, kernel4;
+    init_kernel(kernel1, kernel_size, kernel_size);
+    init_kernel(kernel2, kernel_size, kernel_size);
+    init_kernel(kernel3, kernel_size, kernel_size);
+    init_kernel(kernel4, kernel_size, kernel_size);
 
     Matrix output;
 
     CNN4L(input, kernel1, kernel2, kernel3, kernel4, output);
-
-    for (int i = 0; i < 16; ++i) {
-        for (int j = 0; j < 16; ++j) {
-            std::cout << output[i][j] << '\t';
-        }
-        std::cout << '\n';
-    }
 
     std::cout << "finish" << std::endl;
 

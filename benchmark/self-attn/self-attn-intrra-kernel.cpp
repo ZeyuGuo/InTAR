@@ -422,7 +422,7 @@ void CC1_QKV_Proj(
                         scratchpad[i][j*4+k] = tmp; 
                     }
                 } else {
-                    fifo_output.write(sum);
+                    fifo_output.write((sum >> 6));
                 }
             }
         }
@@ -489,7 +489,7 @@ void SFU_softmax_norm(
         for(int j = 0; j < (D_head >> 5); j++){
             for(int k = 0; k < seq_len; k++){
                 #pragma HLS pipeline II=1
-                ap_int<16> cast_val = ap_int<16>((int)(scaled_attn[i][k]));
+                ap_int<16> cast_val = ap_int<16>((int)(scaled_attn[i][k] * 64));
                 fifo_to_CC0.write(cast_val);
                 fifo_to_CC1.write(cast_val);
             }
