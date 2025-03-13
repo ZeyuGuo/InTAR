@@ -10,3 +10,7 @@ Follow this [tutorial](https://docs.amd.com/r/2023.2-English/Vitis-Tutorials-Vit
 ## Launch V++ Script for P&R
 
 After exporting the xo container, replace the platform path, xo path, and constraint path in `generate_bitstream_sample.sh` and launch the script to start P&R.
+
+## Hardware Emulation Using QEMU
+
+After exporting the xo container, replace the platform path, xo path, and constraint path in `generate_bitstream_sample.sh`. Change target to `hw_emu` and turn on debug mode `-g`. After generating the xsa file for hardware emulation, run `package_sample.sh` with the same modifications as `generate_bitstream_sample.sh`, with the files you want to include in the SD card image (including the host binary, launch scripts, and configuration file `xrt.ini`). You will find a script `/package/launch_hw_emu.sh` to start QEMU directly.
