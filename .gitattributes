@@ -1,2 +1,2 @@
-opt-fluid-model/bitstreams/opt_kernel_vpk180_full.xclbin filter=lfs diff=lfs merge=lfs -text
-opt-fluid-model/bitstreams/opt_kernel_vpk180_efficient_mask.xsa filter=lfs diff=lfs merge=lfs -text
+gpt-2-medium/bitstreams/opt_kernel_vpk180_full.xclbin filter=lfs diff=lfs merge=lfs -text
+gpt-2-medium/bitstreams/opt_kernel_vpk180_efficient_mask.xsa filter=lfs diff=lfs merge=lfs -text
