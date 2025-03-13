@@ -969,8 +969,8 @@ void temporal_acc0(
                         ap_uint<512> tmp;
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
-                            acc_final[ii][k] += ap_int<22>(tmp_recv(k*32+21, k*32));
-                            tmp(k*32+21, k*32) = acc_final[ii][k];
+                            acc_final[ii][k] += ap_int<24>(tmp_recv(k*32+23, k*32));
+                            tmp(k*32+23, k*32) = acc_final[ii][k];
                         }
                         fifo_reduce_send.write(tmp);
                     }
@@ -1231,7 +1231,7 @@ void temporal_acc1_slr0(
                         ap_uint<512> tmp_send;
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
-                            ap_int<32> tmp = acc_final[ii][k] + ap_int<22>(tmp_recv(k*32+21, k*32));
+                            ap_int<32> tmp = acc_final[ii][k] + ap_int<27>(tmp_recv(k*32+26, k*32));
                             if(stage == 3) tmp += ap_int<8>(X[i*16+ii][j*2+k/8]((k%8)*8+7, (k%8)*8));
                             tmp_send(k*32+31, k*32) = tmp;
                         }
@@ -1480,7 +1480,7 @@ void temporal_acc1(
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
                             int offset = ii%8;
-                            scratchpad[i*2+ii/8][j*16+k](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 5); 
+                            scratchpad[i*2+ii/8][j*16+k](offset*8+7, offset*8) = ap_int<8>(acc_final[ii][k] >> 8); 
                         }
                     }
                 } else if (stage == 2){
@@ -1515,8 +1515,8 @@ void temporal_acc1(
                         ap_uint<512> tmp;
                         for(int k = 0; k < 16; k++){
                             #pragma HLS unroll
-                            acc_final[ii][k] += ap_int<22>(tmp_recv(k*32+21, k*32));
-                            tmp(k*32+21, k*32) = acc_final[ii][k];
+                            acc_final[ii][k] += ap_int<27>(tmp_recv(k*32+26, k*32));
+                            tmp(k*32+26, k*32) = acc_final[ii][k];
                         }
                         fifo_reduce_send.write(tmp);
                     }
