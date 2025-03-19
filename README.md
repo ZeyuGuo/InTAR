@@ -6,6 +6,8 @@
 
 We propose a novel accelerator design paradigm on FPGAs: inter-task auto-reconfigurable accelerator (InTAR). InTAR can switch execution patterns automatically based on on-chip memory and computation resources. When a task produces large intermediate data, InTAR pipelines multiple tasks to avoid accessing off-chip memory for these data. Otherwise, InTAR will process tasks sequentially to maximize compute efficiency by eliminating pipeline stalls. Compared with other reconfigurable accelerators, InTAR allows model-specific circuit optimization that keeps only necessary control logic and interconnects. Hence, InTAR requires fewer reconfiguration resources, achieves a high clock frequency, and has a low reconfiguration overhead (10 to 20 ns). Since computations are reconfigured at the task level, InTAR is one of the first works regarding FPGA-based reconfigurable accelerators that support high-level hardware generation tools such as High-Level Synthesis (HLS) for fast accelerator design.
 
+**Preprint**: https://arxiv.org/abs/2502.08807
+
 ## Project Structure
 
 - `/benchmark`: contains multi-task DNN kernels that are HDV
