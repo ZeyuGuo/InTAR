@@ -4,11 +4,11 @@ TOP_NAME := CNN4L
 CONNECTIVITY_FILE := hbm_config.ini
 
 CPU_EXECUTABLE := build/cnn-4L
-HLS_EXECUTABLE := build/cnn-4L-spatial
+HLS_EXECUTABLE := build/cnn-4L-sequential
 
 CPU_SRCS := cnn-4L.cpp
 
-HLS_HOST_SRCS := cnn-4L-spatial-host.cpp
+HLS_HOST_SRCS := cnn-4L-sequential-host.cpp
 HLS_KERNEL_SRCS := cnn-4L-sequential-kernel.cpp
 HLS_SRCS := $(HLS_KERNEL_SRCS) $(HLS_HOST_SRCS)
 

@@ -42,7 +42,7 @@ We propose a novel accelerator design paradigm on FPGAs: inter-task auto-reconfi
 
 ## Multi-Task Kernel Testbench
 
-Run `make <kernel-name>-intrra` and `./<kernel-name>-intrra --bitstreams <bitstream-path>` to perform on-board execution on Alveo U280. Similar for sequential and dataflow kernels in the corresponding folders.
+Follow this [instruction](benchmark/README.md).
 
 ## GPT-2 Medium
 
@@ -50,6 +50,36 @@ Run `make <kernel-name>-intrra` and `./<kernel-name>-intrra --bitstreams <bitstr
     <img src="figures/intra_fpga_design_v2.png" alt="intar-gpt2" width="450">
 </p>
 
-- U280: `make opt350` and `./opt350 <sequence-length> --bitstream bitstreams/opt_kernel_latest.xclbin` to execute an older version of kernel (less optimized, lower frequency). `make opt350-ultrascale` and `./opt350 <sequence-length> --bitstream bitstreams/opt_kernel_xilinx_u280_full.xclbin` for an optimized version of kernel.
+**U280**: Follow these command for on-board execution
 
-- VPK180: Follow [this documentation](/gpt-2-medium/README.md) to generate a custom platform, run hardware emulation using QEMU, and perform bitstream generation.
+Old version (Less optimized kernel):
+```sh
+cd gpt-2-medium
+make opt350
+./opt350 --bitstream bitstreams/opt_kernel_latest.xclbin 128 # 128 is the sequence length. Default is 1024, which is also the maximum sequence length supported
+```
+
+New version (with attention masking):
+```sh
+cd gpt-2-medium
+make opt350-ultrascale
+./opt350-ultrascale --bitstream bitstreams/opt_kernel_xilinx_u280_full.xclbin 128
+```
+
+**VPK180**: Follow [this documentation](/gpt-2-medium/README.md) to generate a custom platform, run hardware emulation using QEMU, and perform bitstream generation. The HLS XO file and constraints is located in `gpt-2-medium/xo`.
+
+> [!NOTE]
+> Weights are randomly generated for testing purpose.
+
+## Reference
+
+If you want to use this work, please cite the paper as following:
+
+```
+@article{he2025intar,
+  title={InTAR: Inter-Task Auto-Reconfigurable Accelerator Design for High Data Volume Variation in DNNs},
+  author={He, Zifan and Truong, Anderson and Cao, Yingqi and Cong, Jason},
+  journal={arXiv preprint arXiv:2502.08807},
+  year={2025}
+}
+```

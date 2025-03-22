@@ -101,12 +101,6 @@ int main(int argc, char *argv[]){
     std::cout << "Kernel time (us): " << float(kernel_time_ns)/1000.0 << std::endl;
     std::cout << "Kernel time (ms): " << float(kernel_time_ns)/1000000.0 << std::endl;
 
-    for (int i = 0; i < 16; ++i) {
-        for (int j = 0; j < 16; ++j) {
-            std::cout << output[i*s + j] << '\t';
-        }
-        std::cout << '\n';
-    }
 
     return 0;
 }
