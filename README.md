@@ -1,6 +1,6 @@
 # InTAR: Inter-Task Auto-Reconfigurable Accelerator Design
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15016321.svg)](https://doi.org/10.5281/zenodo.15016321)
+[![DOI](https://zenodo.org/badge/709673845.svg)](https://doi.org/10.5281/zenodo.14823241)
 
 ![intar-template](/figures/intrra-arch-template.png)
 
