@@ -1,6 +1,9 @@
 ## Multi-Task DNN Kernel Testbench
 
-For detail description of each kernel, check the [preprint](https://arxiv.org/abs/2502.08807) paper in Table III.
+For detailed description of each kernel, check the [preprint](https://arxiv.org/abs/2502.08807) paper in Table III.
+
+> [!NOTE]
+> Speedup and DSP efficiency are normalized based on the sequential kernel. For verification, you can divide the value by whatever value for sequential kernel to get the speedup or DSP efficiency.
 
 | Kernel Name | Cycle Count (InTAR/dataflow/sequential) | Latency (ms) (InTAR/dataflow/sequential) | DSP count (InTAR/dataflow/sequential) |
 | ---- | ---- | ---- | ---- |
